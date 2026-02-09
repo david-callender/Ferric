@@ -1,3 +1,6 @@
+use ferric::ferric_main;
+
 fn main() {
-    println!("Hello, world!");
+    let source = include_str!("src.txt");
+    ferric_main(source);
 }

@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+strip = "symbols"
+
+[lints.clippy]
+pedantic = "warn"

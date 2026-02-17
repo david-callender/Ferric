@@ -5,12 +5,11 @@ mod lexer;
 mod parser;
 
 pub fn ferric_main(source: &str) {
-    let lexer = Lexer::new(source);
-    let tokens = lexer.tokenize();
+    let lexer = Lexer::new(source.bytes());
 
-    let parser = Parser::new(tokens);
-    let stmts = parser.parse();
+    let mut parser = Parser::new(lexer);
+    let expr = parser.parse();
 
     let interpreter = Interpreter::new();
-    interpreter.interpret(stmts);
+    interpreter.interpret(expr);
 }

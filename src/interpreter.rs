@@ -1,4 +1,4 @@
-use crate::parser::Stmt;
+use crate::parser::Expr;
 
 pub struct Interpreter {}
 
@@ -7,5 +7,5 @@ impl Interpreter {
         Self {}
     }
 
-    pub fn interpret(&self, _stmts: Vec<Stmt>) {}
+    pub fn interpret(&self, expr: Expr) {}
 }

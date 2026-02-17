@@ -1,15 +1,21 @@
+use std::iter::Peekable;
+
 use crate::lexer::Token;
 
-pub enum Stmt {}
+pub enum Expr {}
 
-pub struct Parser {}
+pub struct Parser<I: Iterator<Item = Token>> {
+    stream: Peekable<I>,
+}
 
-impl Parser {
-    pub fn new(_tokens: Vec<Token>) -> Self {
-        Self {}
+impl<I: Iterator<Item = Token>> Parser<I> {
+    pub fn new(stream: I) -> Self {
+        Self {
+            stream: stream.peekable(),
+        }
     }
 
-    pub fn parse(&self) -> Vec<Stmt> {
-        vec![]
+    pub fn parse(&mut self) -> Expr {
+        todo!();
     }
 }

@@ -1,8 +1,10 @@
 use std::iter::Peekable;
 
-use crate::lexer::Token;
+use crate::{interpreter::RuntimeVal, lexer::Token};
 
-pub enum Expr {}
+pub enum Expr {
+    Literal(RuntimeVal)
+}
 
 pub struct Parser<I: Iterator<Item = Token>> {
     stream: Peekable<I>,

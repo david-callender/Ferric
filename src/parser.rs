@@ -20,7 +20,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 
     fn consume(&mut self, expected: Token, message: &str) -> Token {
         let token = self.stream.next().expect("expected token, got none");
-        assert!(token != expected, "{message}");
+        assert_eq!(token, expected, "{message}");
         drop(expected);
         token
     }

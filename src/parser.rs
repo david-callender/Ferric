@@ -16,18 +16,17 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             stream: stream.peekable(),
         }
     }
-    
+
     pub fn parse(&mut self) -> Expr {
         todo!();
     }
 
     pub fn parse_basic(&mut self) -> Expr {
-	let token = self.stream.next().expect("expected basic token, got none");
-	match token {
-	    Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
-	    Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
-	    _ => panic!("expected basic token, got non-basic token")
-	}
-	
+        let token = self.stream.next().expect("expected basic token, got none");
+        match token {
+            Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
+            Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
+            _ => panic!("expected basic token, got non-basic token"),
+        }
     }
 }

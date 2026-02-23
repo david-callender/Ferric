@@ -66,4 +66,11 @@ mod tests {
             Expr::Literal(RuntimeVal::String("dingus".to_string()))
         );
     }
+
+    #[test]
+    pub fn test_parentheses() {
+        let mut parser =
+            Parser::new([Token::OpenParen, Token::NumLit(4.0), Token::CloseParen].into_iter());
+        assert_eq!(parser.parse(), Expr::Literal(RuntimeVal::Number(4.0)));
+    }
 }

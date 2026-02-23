@@ -18,10 +18,10 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     pub fn parse(&mut self) -> Expr {
-        todo!();
+        self.parse_basic()
     }
 
-    pub fn parse_basic(&mut self) -> Expr {
+    fn parse_basic(&mut self) -> Expr {
         let token = self.stream.next().expect("expected basic token, got none");
         match token {
             Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),

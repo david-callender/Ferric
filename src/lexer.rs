@@ -62,7 +62,7 @@ impl std::fmt::Display for Token {
             Token::LOr => write!(f, "or"),
             Token::Bang => write!(f, "!"),
             Token::StringLit(n) => write!(f, "{n}"),
-            Token::NumLit(n) => write!(f, "{n}"),
+            Token::NumLit(n) => write!(f, "\"{n}\""),
             Token::Ident(n) => write!(f, "ident[{n}]"),
         }
     }

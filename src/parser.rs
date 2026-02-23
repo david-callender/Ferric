@@ -1,17 +1,21 @@
 use std::iter::Peekable;
 
-use crate::{interpreter::RuntimeVal, lexer::Token };
+use crate::{interpreter::RuntimeVal, lexer::Token};
 
 pub enum Expr {
     Literal(RuntimeVal),
-    Operation{left: Box<Expr>, operation: Operator, right: Box<Expr>},
+    Operation {
+        left: Box<Expr>,
+        operation: Operator,
+        right: Box<Expr>,
+    },
 }
 
 pub enum Operator {
     Add,
     Subtract,
     Multiply,
-    Divide
+    Divide,
 }
 
 pub struct Parser<I: Iterator<Item = Token>> {

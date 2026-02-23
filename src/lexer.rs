@@ -32,6 +32,42 @@ pub enum Token {
     Ident(String),
 }
 
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Let => write!(f, "let"),
+            Token::If => write!(f, "if"),
+            Token::Elseif => write!(f, "elseif"),
+            Token::Otherwise => write!(f, "otherwise"),
+            Token::While => write!(f, "while"),
+            Token::Fn => write!(f, "fn"),
+            Token::OpenParen => write!(f, "("),
+            Token::CloseParen => write!(f, ")"),
+            Token::OpenBracket => write!(f, "{{"),
+            Token::CloseBracket => write!(f, "}}"),
+            Token::Semi => write!(f, ";"),
+            Token::Comma => write!(f, ","),
+            Token::Eq => write!(f, "="),
+            Token::EqEq => write!(f, "=="),
+            Token::BangEq => write!(f, "!="),
+            Token::Plus => write!(f, "+"),
+            Token::Minus => write!(f, "-"),
+            Token::Star => write!(f, "*"),
+            Token::Slash => write!(f, "/"),
+            Token::Greater => write!(f, ">"),
+            Token::GreaterEq => write!(f, ">="),
+            Token::Less => write!(f, "<"),
+            Token::LessEq => write!(f, "<="),
+            Token::LAnd => write!(f, "and"),
+            Token::LOr => write!(f, "or"),
+            Token::Bang => write!(f, "!"),
+            Token::StringLit(n) => write!(f, "{n}"),
+            Token::NumLit(n) => write!(f, "{n}"),
+            Token::Ident(n) => write!(f, "ident[{n}]"),
+        }
+    }
+}
+
 pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
 }

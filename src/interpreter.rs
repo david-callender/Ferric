@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use crate::parser::Expr;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
     Number(f64),
     String(String),

@@ -1,5 +1,6 @@
 use std::iter::Peekable;
 
+#[derive(Clone, PartialEq)]
 pub enum Token {
     Let,          // let
     If,           // if

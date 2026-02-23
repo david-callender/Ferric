@@ -89,10 +89,10 @@ impl Interpreter {
 
     // interpret -> calls evaluate, prints runTimeVal
     pub fn interpret(&self, expr: Expr) {
-        let finalVal = self.evaluate(&expr);
+        let final_val = self.evaluate(&expr);
 
         // matches nodes in the ast
-        match finalVal {
+        match final_val {
             RuntimeVal::Number(n) => println!("{n}"),
             RuntimeVal::String(s) => println!("{s}"),
         }

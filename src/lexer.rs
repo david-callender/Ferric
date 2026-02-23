@@ -10,20 +10,20 @@ pub enum Token {
     OpenParen,    // (
     CloseParen,   // )
     OpenBracket,  // {
-    CloseBracket, //, }
-    Sem,          // ;
+    CloseBracket, // }
+    Semi,         // ;
     Comma,        // ,
     Eq,           // =
-    EqEq,         // =”
-    BangEq,       // !”
+    EqEq,         // ==
+    BangEq,       // !=
     Plus,         // +
     Minus,        // -
     Star,         // *
     Slash,        // /
     Greater,      // >
-    GreaterEq,    // >”
+    GreaterEq,    // >=
     Less,         // <
-    LessEq,       // <”
+    LessEq,       // <=
     LAnd,         // and
     LOr,          // or
     Bang,         // !

@@ -3,7 +3,7 @@ use std::iter::Peekable;
 use crate::{interpreter::RuntimeVal, lexer::Token};
 
 pub enum Expr {
-    Literal(RuntimeVal)
+    Literal(RuntimeVal),
 }
 
 pub struct Parser<I: Iterator<Item = Token>> {

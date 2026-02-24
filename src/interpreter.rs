@@ -76,7 +76,7 @@ impl Interpreter {
     fn unary_bit_not(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
             RuntimeVal::Number(n) => {
-                assert!(n.fract() != 0.0, "You can't bang a float"); // TODO : Update Error messages
+                assert!(n.fract() != 0.0, "You can't bang a float!"); // TODO : Update Error messages
                 RuntimeVal::Number(!(n as i64) as f64)
             },
             _ => panic!("You can't not not negate that (number)!") // TODO : Update error messages

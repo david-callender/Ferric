@@ -19,8 +19,6 @@ impl Display for RuntimeVal {
 
 pub struct Interpreter {}
 
-// evaluate runTime values together, break into serpate function
-
 impl Interpreter {
     pub fn new() -> Self {
         Self {}
@@ -87,11 +85,11 @@ impl Interpreter {
         }
     }
 
-    // interpret -> calls evaluate, prints runTimeVal
     pub fn interpret(&self, expr: Expr) {
+        // expr - head of ast tree
+        // prints out the RuntimeVal of expr
         let final_val = self.evaluate(&expr);
 
-        // matches nodes in the ast
         match final_val {
             RuntimeVal::Number(n) => println!("{n}"),
             RuntimeVal::String(s) => println!("{s}"),

@@ -1,11 +1,12 @@
 use std::fmt::Display;
 
-use crate::parser::{Expr, Operator};
+use crate::parser::{Expr, BinaryOp};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
     Number(f64),
     String(String),
+    Boolean(bool)
 }
 
 impl Display for RuntimeVal {
@@ -13,6 +14,7 @@ impl Display for RuntimeVal {
         match self {
             Self::Number(n) => write!(f, "{n}"),
             Self::String(s) => write!(f, "{s}"),
+            Self::Boolean(b) => write!(f, "{b}"),
         }
     }
 }
@@ -68,7 +70,7 @@ impl Interpreter {
     fn evaluate(&self, expr: &Expr) -> RuntimeVal {
         match expr {
             Expr::Literal(runtime_val) => runtime_val.clone(),
-            Expr::Operation {
+            Expr::Binary {
                 left,
                 operation,
                 right,
@@ -76,10 +78,10 @@ impl Interpreter {
                 let left_val = self.evaluate(left);
                 let right_val = self.evaluate(right);
                 match operation {
-                    Operator::Add => self.operation_add(left_val, right_val),
-                    Operator::Subtract => self.operation_subtract(left_val, right_val),
-                    Operator::Multiply => self.operation_multiply(left_val, right_val),
-                    Operator::Divide => self.operation_divide(left_val, right_val),
+                    BinaryOp::Add => self.operation_add(left_val, right_val),
+                    BinaryOp::Subtract => self.operation_subtract(left_val, right_val),
+                    BinaryOp::Multiply => self.operation_multiply(left_val, right_val),
+                    BinaryOp::Divide => self.operation_divide(left_val, right_val),
                 }
             }
         }
@@ -93,6 +95,7 @@ impl Interpreter {
         match final_val {
             RuntimeVal::Number(n) => println!("{n}"),
             RuntimeVal::String(s) => println!("{s}"),
+            RuntimeVal::Boolean(b) => println!("{b}")
         }
     }
 }

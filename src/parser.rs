@@ -12,6 +12,7 @@ pub enum Expr {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operator {
     Add,
     Subtract,

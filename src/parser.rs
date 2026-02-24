@@ -31,6 +31,16 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
+    fn matches(&mut self, expected: Token) -> bool {
+        if self.stream.peek() == Some(&expected) {
+            let _ = self.stream.next().unwrap();
+            drop(expected);
+            true
+        } else {
+            false
+        }
+    }
+
     fn consume(&mut self, expected: Token, message: &str) -> Token {
         let token = self.stream.next().expect("expected token, got none");
         assert_eq!(token, expected, "{message}");
@@ -39,7 +49,21 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     pub fn parse(&mut self) -> Expr {
-        self.parse_basic()
+        self.parse_add()
+    }
+
+    fn parse_add(&mut self) -> Expr {
+        let left = self.parse_basic();
+
+        if self.matches(Token::Plus) {
+            let right = self.parse_basic();
+            return Expr::Operation {
+                left: Box::new(left),
+                operation: Operator::Add,
+                right: Box::new(right),
+            };
+        }
+        left
     }
 
     fn parse_basic(&mut self) -> Expr {
@@ -85,5 +109,17 @@ mod tests {
         let mut parser =
             Parser::new([Token::OpenParen, Token::NumLit(4.0), Token::CloseParen].into_iter());
         assert_eq!(parser.parse(), Expr::Literal(RuntimeVal::Number(4.0)));
+    }
+
+    #[test]
+    pub fn test_add() {
+        let mut parser =
+            Parser::new([Token::NumLit(4.0), Token::Plus, Token::NumLit(5.0)].into_iter());
+        let target = Expr::Operation {
+            left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
+            operation: Operator::Add,
+            right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
+        };
+        assert_eq!(parser.parse(), target);
     }
 }

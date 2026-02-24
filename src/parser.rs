@@ -10,6 +10,10 @@ pub enum Expr {
         operation: BinaryOp,
         right: Box<Expr>,
     },
+    Unary {
+        operation: UnaryOp,
+        right: Box<Expr>
+    }
 
 }
 
@@ -21,6 +25,7 @@ pub enum BinaryOp {
     Divide,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Negate,
     BitNot

@@ -1,4 +1,3 @@
-use core::num;
 use std::iter::Peekable;
 
 #[derive(Debug, Clone, PartialEq)]

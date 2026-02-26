@@ -6,7 +6,7 @@ use crate::parser::{BinaryOp, Expr, UnaryOp};
 pub enum RuntimeVal {
     Number(f64),
     String(String),
-    Boolean(bool)
+    Boolean(bool),
 }
 
 impl Display for RuntimeVal {
@@ -69,7 +69,7 @@ impl Interpreter {
     fn unary_negate(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
             RuntimeVal::Boolean(b) => RuntimeVal::Boolean(!b),
-            _ => panic!("You can't not not negate that!") // TODO : Update error messages
+            _ => panic!("You can't not not negate that!"), // TODO : Update error messages
         }
     }
 
@@ -78,8 +78,8 @@ impl Interpreter {
             RuntimeVal::Number(n) => {
                 assert!(n.fract() != 0.0, "You can't bang a float!"); // TODO : Update Error messages
                 RuntimeVal::Number(!(n as i64) as f64)
-            },
-            _ => panic!("You can't not not negate that (number)!") // TODO : Update error messages
+            }
+            _ => panic!("You can't not not negate that (number)!"), // TODO : Update error messages
         }
     }
 
@@ -100,17 +100,14 @@ impl Interpreter {
                     BinaryOp::Multiply => self.operation_multiply(left_val, right_val),
                     BinaryOp::Divide => self.operation_divide(left_val, right_val),
                 }
-            },
-            Expr::Unary {
-                operation, right 
-            } => {
+            }
+            Expr::Unary { operation, right } => {
                 let right_val = self.evaluate(right);
                 match operation {
                     UnaryOp::Negate => self.unary_negate(right_val),
                     UnaryOp::BitNot => self.unary_bit_not(right_val),
                 }
             }
-            
         }
     }
 
@@ -122,7 +119,7 @@ impl Interpreter {
         match final_val {
             RuntimeVal::Number(n) => println!("{n}"),
             RuntimeVal::String(s) => println!("{s}"),
-            RuntimeVal::Boolean(b) => println!("{b}")
+            RuntimeVal::Boolean(b) => println!("{b}"),
         }
     }
 }

@@ -12,9 +12,8 @@ pub enum Expr {
     },
     Unary {
         operation: UnaryOp,
-        right: Box<Expr>
-    }
-
+        right: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +27,7 @@ pub enum BinaryOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Negate,
-    BitNot
+    BitNot,
 }
 
 pub struct Parser<I: Iterator<Item = Token>> {

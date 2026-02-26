@@ -99,7 +99,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                 }
                 Some(Token::NumLit(num.parse::<f64>().unwrap()))
             }
-            b => panic!("Invalid byte {b}"),
+            b => panic!("Invalid byte {}", b as char),
         }
     }
 }

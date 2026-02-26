@@ -5,19 +5,29 @@ use crate::{interpreter::RuntimeVal, lexer::Token};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(RuntimeVal),
-    Operation {
+    Binary {
         left: Box<Expr>,
-        operation: Operator,
+        operation: BinaryOp,
+        right: Box<Expr>,
+    },
+    Unary {
+        operation: UnaryOp,
         right: Box<Expr>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Operator {
+pub enum BinaryOp {
     Add,
     Subtract,
     Multiply,
     Divide,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnaryOp {
+    Negate,
+    BitNot,
 }
 
 pub struct Parser<I: Iterator<Item = Token>> {

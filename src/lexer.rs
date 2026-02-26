@@ -76,6 +76,12 @@ pub struct Lexer<I: Iterator<Item = u8>> {
 impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
+        loop {
+        if self.stream.next().is_none() {
+            return None;
+        } else if self.stream.next().unwrap().is_ascii_whitespace() {
+            continue;
+        }
         match self.stream.next()? {
             b'(' => Some(Token::OpenParen),
             b')' => Some(Token::CloseParen),
@@ -100,8 +106,9 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                 Some(Token::NumLit(num.parse::<f64>().unwrap()))
             }
             b => panic!("Invalid byte {}", b as char),
-        }
+        };
     }
+}
 }
 
 impl<I: Iterator<Item = u8>> Lexer<I> {

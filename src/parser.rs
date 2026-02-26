@@ -77,16 +77,16 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_multiplication(&mut self) -> Expr {
-	let left = self.parse_basic();
-	if self.matches(Token::Star) {
-	    let right = self.parse_basic();
-	    return Expr::Operation(
-		left: Box::new(left),
-		operation: Operator::Multiply,
-		right: Box::new(right),
-	    )
-	}
-	left
+        let left = self.parse_basic();
+        if self.matches(Token::Star) {
+            let right = self.parse_basic();
+            return Expr::Operation {
+                left: Box::new(left),
+                operation: Operator::Multiply,
+                right: Box::new(right),
+            };
+        }
+        left
     }
 
     // parse_paren assumes that the initial OpenParen token has already
@@ -134,5 +134,17 @@ mod tests {
             right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
         };
         assert_eq!(parser.parse(), target);
+    }
+
+    #[test]
+    pub fn test_multiply() {
+        let mut parser =
+            Parser::new([Token::NumLit(20.0), Token::Star, Token::NumLit(22.0)].into_iter());
+	let target = Expr::Operation{
+	    left: Box::new(Expr::Literal(RuntimeVal::Number(20.0))),
+	    operation: Operator::Multiply,
+	    right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
+	};
+	assert_eq!(parser.parse(), target);
     }
 }

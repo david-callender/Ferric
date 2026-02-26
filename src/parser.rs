@@ -53,7 +53,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_add(&mut self) -> Expr {
-        let left = self.parse_basic();
+        let left = self.parse_multiplication();
 
         if self.matches(Token::Plus) {
             let right = self.parse_basic();
@@ -74,6 +74,19 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
             _ => panic!("expected basic token, got non-basic token"),
         }
+    }
+
+    fn parse_multiplication(&mut self) -> Expr {
+	let left = self.parse_basic();
+	if self.matches(Token::Star) {
+	    let right = self.parse_basic();
+	    return Expr::Operation(
+		left: Box::new(left),
+		operation: Operator::Multiply,
+		right: Box::new(right),
+	    )
+	}
+	left
     }
 
     // parse_paren assumes that the initial OpenParen token has already

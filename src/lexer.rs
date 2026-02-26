@@ -76,30 +76,36 @@ pub struct Lexer<I: Iterator<Item = u8>> {
 impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.stream.next()? {
-            b'(' => Some(Token::OpenParen),
-            b')' => Some(Token::CloseParen),
-            b'{' => Some(Token::OpenBracket),
-            b'}' => Some(Token::CloseBracket),
-            b';' => Some(Token::Semi),
-            b',' => Some(Token::Comma),
-            b'+' => Some(Token::Plus),
-            b'-' => Some(Token::Minus),
-            b'*' => Some(Token::Star),
-            x if x.is_ascii_digit() => {
-                let mut num = String::new();
-                num.push(x as char);
-                while let Some(a) = self.stream.peek() {
-                    if a.is_ascii_digit() || *a == b'.' {
-                        num.push(*a as char);
-                        self.stream.next();
-                    } else {
-                        break;
-                    }
-                }
-                Some(Token::NumLit(num.parse::<f64>().unwrap()))
+        loop {
+            let c = self.stream.next()?;
+            if c.is_ascii_whitespace() {
+                continue;
             }
-            b => panic!("Invalid byte {}", b as char),
+            match c {
+                b'(' => return Some(Token::OpenParen),
+                b')' => return Some(Token::CloseParen),
+                b'{' => return Some(Token::OpenBracket),
+                b'}' => return Some(Token::CloseBracket),
+                b';' => return Some(Token::Semi),
+                b',' => return Some(Token::Comma),
+                b'+' => return Some(Token::Plus),
+                b'-' => return Some(Token::Minus),
+                b'*' => return Some(Token::Star),
+                x if x.is_ascii_digit() => {
+                    let mut num = String::new();
+                    num.push(x as char);
+                    while let Some(a) = self.stream.peek() {
+                        if a.is_ascii_digit() || *a == b'.' {
+                            num.push(*a as char);
+                            self.stream.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    return Some(Token::NumLit(num.parse::<f64>().unwrap()));
+                }
+                b => panic!("Invalid byte {}", b as char),
+            };
         }
     }
 }

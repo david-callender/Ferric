@@ -67,9 +67,9 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 
         if self.matches(Token::Plus) {
             let right = self.parse_basic();
-            return Expr::Operation {
+            return Expr::Binary {
                 left: Box::new(left),
-                operation: Operator::Add,
+                operation: BinaryOp::Add,
                 right: Box::new(right),
             };
         }
@@ -125,9 +125,9 @@ mod tests {
     pub fn test_add() {
         let mut parser =
             Parser::new([Token::NumLit(4.0), Token::Plus, Token::NumLit(5.0)].into_iter());
-        let target = Expr::Operation {
+        let target = Expr::Binary{
             left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
-            operation: Operator::Add,
+            operation: BinaryOp::Add,
             right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
         };
         assert_eq!(parser.parse(), target);

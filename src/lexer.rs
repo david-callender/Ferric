@@ -1,3 +1,4 @@
+use core::num;
 use std::iter::Peekable;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,21 +78,20 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if self.stream.next().is_none() {
-                return None;
-            } else if self.stream.next().unwrap().is_ascii_whitespace() {
+            let c = self.stream.next()?;
+            if c.is_ascii_whitespace() {
                 continue;
             }
-            match self.stream.next()? {
-                b'(' => Some(Token::OpenParen),
-                b')' => Some(Token::CloseParen),
-                b'{' => Some(Token::OpenBracket),
-                b'}' => Some(Token::CloseBracket),
-                b';' => Some(Token::Semi),
-                b',' => Some(Token::Comma),
-                b'+' => Some(Token::Plus),
-                b'-' => Some(Token::Minus),
-                b'*' => Some(Token::Star),
+            match c {
+                b'(' => return Some(Token::OpenParen),
+                b')' => return Some(Token::CloseParen),
+                b'{' => return Some(Token::OpenBracket),
+                b'}' => return Some(Token::CloseBracket),
+                b';' => return Some(Token::Semi),
+                b',' => return Some(Token::Comma),
+                b'+' => return Some(Token::Plus),
+                b'-' => return Some(Token::Minus),
+                b'*' => return Some(Token::Star),
                 x if x.is_ascii_digit() => {
                     let mut num = String::new();
                     num.push(x as char);
@@ -103,7 +103,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                             break;
                         }
                     }
-                    Some(Token::NumLit(num.parse::<f64>().unwrap()))
+                    return Some(Token::NumLit(num.parse::<f64>().unwrap()));
                 }
                 b => panic!("Invalid byte {}", b as char),
             };

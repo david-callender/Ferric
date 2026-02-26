@@ -5,19 +5,29 @@ use crate::{interpreter::RuntimeVal, lexer::Token};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(RuntimeVal),
-    Operation {
+    Binary {
         left: Box<Expr>,
-        operation: Operator,
+        operation: BinaryOp,
+        right: Box<Expr>,
+    },
+    Unary {
+        operation: UnaryOp,
         right: Box<Expr>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Operator {
+pub enum BinaryOp {
     Add,
     Subtract,
     Multiply,
     Divide,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnaryOp {
+    Negate,
+    BitNot,
 }
 
 pub struct Parser<I: Iterator<Item = Token>> {
@@ -59,7 +69,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             let right = self.parse_multiplication();
             return Expr::Operation {
                 left: Box::new(left),
-                operation: Operator::Add,
+                operation: BinaryOp::Add,
                 right: Box::new(right),
             };
         }
@@ -128,9 +138,9 @@ mod tests {
     pub fn test_add() {
         let mut parser =
             Parser::new([Token::NumLit(4.0), Token::Plus, Token::NumLit(5.0)].into_iter());
-        let target = Expr::Operation {
+        let target = Expr::Binary{
             left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
-            operation: Operator::Add,
+            operation: BinaryOp::Add,
             right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
         };
         assert_eq!(parser.parse(), target);

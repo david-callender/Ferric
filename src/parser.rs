@@ -63,13 +63,26 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_add(&mut self) -> Expr {
-        let left = self.parse_basic();
+        let left = self.parse_multiplication();
 
         if self.matches(Token::Plus) {
-            let right = self.parse_basic();
+            let right = self.parse_multiplication();
             return Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Add,
+                right: Box::new(right),
+            };
+        }
+        left
+    }
+
+    fn parse_multiplication(&mut self) -> Expr {
+        let left = self.parse_basic();
+        if self.matches(Token::Star) {
+            let right = self.parse_basic();
+            return Expr::Binary {
+                left: Box::new(left),
+                operation: BinaryOp::Multiply,
                 right: Box::new(right),
             };
         }
@@ -125,10 +138,22 @@ mod tests {
     pub fn test_add() {
         let mut parser =
             Parser::new([Token::NumLit(4.0), Token::Plus, Token::NumLit(5.0)].into_iter());
-        let target = Expr::Binary{
+        let target = Expr::Binary {
             left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
             operation: BinaryOp::Add,
             right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
+        };
+        assert_eq!(parser.parse(), target);
+    }
+
+    #[test]
+    pub fn test_multiplication() {
+        let mut parser =
+            Parser::new([Token::NumLit(20.0), Token::Star, Token::NumLit(22.0)].into_iter());
+        let target = Expr::Binary {
+            left: Box::new(Expr::Literal(RuntimeVal::Number(20.0))),
+            operation: BinaryOp::Multiply,
+            right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
         };
         assert_eq!(parser.parse(), target);
     }

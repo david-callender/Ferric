@@ -114,6 +114,7 @@ mod tests {
 
     #[test]
     pub fn test_num_literal() {
+        panic!("testing");
         let mut parser = Parser::new([Token::NumLit(4.0)].into_iter());
         assert_eq!(parser.parse(), Expr::Literal(RuntimeVal::Number(4.0)));
     }

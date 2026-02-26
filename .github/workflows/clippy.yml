@@ -13,4 +13,4 @@ jobs:
         steps:
             - uses: actions/checkout@v6
             - name: Run Clippy
-              run: cargo clippy
+              run: echo "running clippy" && cargo clippy && echo "running test" && cargo test

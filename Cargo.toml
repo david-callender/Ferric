@@ -12,4 +12,7 @@ panic = "abort"
 strip = "symbols"
 
 [lints.clippy]
-pedantic = "warn"
+pedantic = { level = "warn", priority = -1 }
+cast_possible_truncation = "allow"
+cast-sign-loss = "allow"
+cast-precision-loss = "allow"

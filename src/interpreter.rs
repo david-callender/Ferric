@@ -37,7 +37,6 @@ impl Interpreter {
         }
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn operation_multiply(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
         match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 * n2),
@@ -111,10 +110,10 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&self, expr: Expr) {
+    pub fn interpret(&self, expr: &Expr) {
         // expr - head of ast tree
         // prints out the RuntimeVal of expr
-        let final_val = self.evaluate(&expr);
+        let final_val = self.evaluate(expr);
 
         match final_val {
             RuntimeVal::Number(n) => println!("{n}"),

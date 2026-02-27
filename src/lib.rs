@@ -11,5 +11,5 @@ pub fn ferric_main(source: &str) {
     let expr = parser.parse();
 
     let interpreter = Interpreter::new();
-    interpreter.interpret(expr);
+    interpreter.interpret(&expr);
 }

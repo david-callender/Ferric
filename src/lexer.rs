@@ -91,7 +91,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                 b'+' => return Some(Token::Plus),
                 b'-' => return Some(Token::Minus),
                 b'*' => return Some(Token::Star),
-		b'/' => return Some(Token::Slash),
+                b'/' => return Some(Token::Slash),
                 x if x.is_ascii_digit() => {
                     let mut num = String::new();
                     num.push(x as char);

@@ -65,21 +65,21 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     fn parse_add_subtract(&mut self) -> Expr {
         let left = self.parse_multiply_divide();
 
-	if self.matches(Token::Plus) {
-	    let right = self.parse_multiply_divide();
-	    return Expr::Binary {
-		left: Box::new(left),
-		operation: BinaryOp::Add,
-		right: Box::new(right),
-	    };
-	} else if self.matches(Token::Minus) {
-	    let right = self.parse_multiply_divide();
-	    return Expr::Binary {
-		left: Box::new(left),
-		operation: BinaryOp::Subtract,
-		right: Box::new(right),
-	    };
-	}
+        if self.matches(Token::Plus) {
+            let right = self.parse_multiply_divide();
+            return Expr::Binary {
+                left: Box::new(left),
+                operation: BinaryOp::Add,
+                right: Box::new(right),
+            };
+        } else if self.matches(Token::Minus) {
+            let right = self.parse_multiply_divide();
+            return Expr::Binary {
+                left: Box::new(left),
+                operation: BinaryOp::Subtract,
+                right: Box::new(right),
+            };
+        }
         left
     }
 
@@ -93,13 +93,13 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                 right: Box::new(right),
             };
         } else if self.matches(Token::Slash) {
-	    let right = self.parse_basic();
-	    return Expr::Binary {
-		left: Box::new(left),
-		operation: BinaryOp::Divide,
-		right: Box::new(right),
-	    };
-	}
+            let right = self.parse_basic();
+            return Expr::Binary {
+                left: Box::new(left),
+                operation: BinaryOp::Divide,
+                right: Box::new(right),
+            };
+        }
         left
     }
 
@@ -121,7 +121,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         inner_expr
     }
 }
-    
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,14 +162,14 @@ mod tests {
 
     #[test]
     pub fn test_subtract() {
-	let mut parser =
-	    Parser::new([Token::NumLit(4.0), Token::Minus, Token::NumLit(5.0)].into_iter());
-	let target = Expr::Binary {
-	    left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
-	    operation: BinaryOp::Subtract,
-	    right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
-	};
-	assert_eq!(parser.parse(), target);
+        let mut parser =
+            Parser::new([Token::NumLit(4.0), Token::Minus, Token::NumLit(5.0)].into_iter());
+        let target = Expr::Binary {
+            left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
+            operation: BinaryOp::Subtract,
+            right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
+        };
+        assert_eq!(parser.parse(), target);
     }
 
     #[test]
@@ -186,13 +186,13 @@ mod tests {
 
     #[test]
     pub fn test_divide() {
-	let mut parser =
+        let mut parser =
             Parser::new([Token::NumLit(20.0), Token::Slash, Token::NumLit(22.0)].into_iter());
-	let target = Expr::Binary {
+        let target = Expr::Binary {
             left: Box::new(Expr::Literal(RuntimeVal::Number(20.0))),
             operation: BinaryOp::Divide,
             right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
         };
-	assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse(), target);
     }
 }

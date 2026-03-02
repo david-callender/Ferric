@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, io::Write};
 
 use crate::parser::{BinaryOp, Expr, UnaryOp};
 
@@ -19,11 +19,13 @@ impl Display for RuntimeVal {
     }
 }
 
-pub struct Interpreter {}
+pub struct Interpreter<'a, W: Write> {
+    output: &'a mut W,
+}
 
-impl Interpreter {
-    pub fn new() -> Self {
-        Self {}
+impl<'a, W: Write> Interpreter<'a, W> {
+    pub fn new(output: &'a mut W) -> Self {
+        Self { output }
     }
 
     fn operation_add(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
@@ -110,15 +112,16 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&self, expr: &Expr) {
+    pub fn interpret(&mut self, expr: &Expr) {
         // expr - head of ast tree
         // prints out the RuntimeVal of expr
         let final_val = self.evaluate(expr);
 
         match final_val {
-            RuntimeVal::Number(n) => println!("{n}"),
-            RuntimeVal::String(s) => println!("{s}"),
-            RuntimeVal::Boolean(b) => println!("{b}"),
+            RuntimeVal::Number(n) => writeln!(self.output, "{n}"),
+            RuntimeVal::String(s) => writeln!(self.output, "{s}"),
+            RuntimeVal::Boolean(b) => writeln!(self.output, "{b}"),
         }
+        .expect("Failed to write to output");
     }
 }

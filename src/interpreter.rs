@@ -84,7 +84,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 match fn_name.as_str() {
                     "print" => {
                         let [first] = &args[..] else { panic!() };
-                        writeln!(self.output, "{:?}", first);
+                        writeln!(self.output, "{}", first);
                         RuntimeVal::Null
                     }
                     _ => panic!(""),

@@ -7,6 +7,8 @@ pub enum RuntimeVal {
     Number(f64),
     String(String),
     Boolean(bool),
+    Function(String),
+    Null,
 }
 
 impl Display for RuntimeVal {
@@ -15,6 +17,8 @@ impl Display for RuntimeVal {
             Self::Number(n) => write!(f, "{n}"),
             Self::String(s) => write!(f, "{s}"),
             Self::Boolean(b) => write!(f, "{b}"),
+            Self::Function(n) => write!(f, "{n}"),
+            Self::Null => write!(f, "Null"),
         }
     }
 }
@@ -74,6 +78,24 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
+    fn call_function(&mut self, ident: RuntimeVal, args: Vec<RuntimeVal>) -> RuntimeVal {
+        match ident {
+            RuntimeVal::Function(fn_name) => {
+                let print_func = String::from("print");
+
+                match fn_name {
+                    print_func => {
+                        let [first] = &args[..] else { panic!() };
+                        writeln!(self.output, "{:?}", args);
+                        RuntimeVal::Null
+                    }
+                    _ => panic!(""),
+                }
+            }
+            _ => panic!("Invalid function call"),
+        }
+    }
+
     fn unary_bit_not(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
             RuntimeVal::Number(n) => {
@@ -85,7 +107,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
     }
 
     // evalute -> condense tree -> runTimeVal
-    fn evaluate(&self, expr: &Expr) -> RuntimeVal {
+    fn evaluate(&mut self, expr: &Expr) -> RuntimeVal {
         match expr {
             Expr::Literal(runtime_val) => runtime_val.clone(),
             Expr::Binary {
@@ -109,6 +131,13 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     UnaryOp::BitNot => self.unary_bit_not(right_val),
                 }
             }
+            Expr::Call { callee, args } => {
+                let func_caller = self.evaluate(callee);
+                let args = args.iter().map(|expr| self.evaluate(expr)).collect();
+
+                self.call_function(func_caller, args)
+            }
+            Expr::Ident(name) => RuntimeVal::Function(name.clone()),
         }
     }
 
@@ -121,6 +150,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
             RuntimeVal::Number(n) => writeln!(self.output, "{n}"),
             RuntimeVal::String(s) => writeln!(self.output, "{s}"),
             RuntimeVal::Boolean(b) => writeln!(self.output, "{b}"),
+            RuntimeVal::Function(n) => writeln!(self.output, "{n}"),
+            RuntimeVal::Null => writeln!(self.output, "Null"),
         }
         .expect("Failed to write to output");
     }

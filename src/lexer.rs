@@ -1,4 +1,4 @@
-use std::iter::Peekable;
+use std::{collections::HashMap, iter::Peekable};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -73,6 +73,35 @@ pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
 }
 
+impl<I: Iterator<Item = u8>> Lexer<I> {
+    fn matching(&mut self, first: u8) -> Token {
+        let second = self.stream.peek();
+        match (first, second) {
+            (b'=', Some(b'=')) => {
+                self.stream.next();
+                Token::EqEq
+            }
+            (b'<', Some(b'=')) => {
+                self.stream.next();
+                Token::LessEq
+            }
+            (b'>', Some(b'=')) => {
+                self.stream.next();
+                Token::GreaterEq
+            }
+            (b'!', Some(b'=')) => {
+                self.stream.next();
+                Token::BangEq
+            }
+            (b'=', _) => Token::Eq,
+            (b'<', _) => Token::Less,
+            (b'>', _) => Token::Greater,
+            (b'!', _) => Token::Bang,
+            _ => panic!("Invalid byte {}", first as char),
+        }
+    }
+}
+
 impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
@@ -92,6 +121,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                 b'-' => return Some(Token::Minus),
                 b'*' => return Some(Token::Star),
                 b'/' => return Some(Token::Slash),
+                b'=' | b'!' | b'<' | b'>' => return Some(self.matching(c)),
                 x if x.is_ascii_digit() => {
                     let mut num = String::new();
                     num.push(x as char);
@@ -104,6 +134,32 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                         }
                     }
                     return Some(Token::NumLit(num.parse::<f64>().unwrap()));
+                }
+                x if x.is_ascii_alphabetic() || x == b'_' => {
+                    let keywords = HashMap::from([
+                        ("let", Token::Let),
+                        ("let", Token::Let),
+                        ("if", Token::If),
+                        ("elseif", Token::Elseif),
+                        ("otherwise", Token::Otherwise),
+                        ("while", Token::While),
+                        ("fn", Token::Fn),
+                    ]);
+                    let mut ident_bytes = vec![x];
+                    while let Some(b) = self.stream.peek()
+                        && (b.is_ascii_alphanumeric() || *b == b'_')
+                    {
+                        ident_bytes.push(*b);
+                        self.stream.next();
+                    }
+                    let ident =
+                        String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
+
+                    return if let Some(keyword) = keywords.get(ident.as_str()) {
+                        Some(keyword.clone())
+                    } else {
+                        Some(Token::Ident(ident))
+                    };
                 }
                 b => panic!("Invalid byte {}", b as char),
             };

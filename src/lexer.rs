@@ -1,4 +1,4 @@
-use std::iter::Peekable;
+use std::{collections::HashMap, iter::Peekable};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -134,6 +134,32 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                         }
                     }
                     return Some(Token::NumLit(num.parse::<f64>().unwrap()));
+                }
+                x if x.is_ascii_alphabetic() || x == b'_' => {
+                    let keywords = HashMap::from([
+                        ("let", Token::Let),
+                        ("let", Token::Let),
+                        ("if", Token::If),
+                        ("elseif", Token::Elseif),
+                        ("otherwise", Token::Otherwise),
+                        ("while", Token::While),
+                        ("fn", Token::Fn),
+                    ]);
+                    let mut ident_bytes = vec![x];
+                    while let Some(b) = self.stream.peek()
+                        && (b.is_ascii_alphanumeric() || *b == b'_')
+                    {
+                        ident_bytes.push(*b);
+                        self.stream.next();
+                    }
+                    let ident =
+                        String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
+
+                    return if let Some(keyword) = keywords.get(ident.as_str()) {
+                        Some(keyword.clone())
+                    } else {
+                        Some(Token::Ident(ident))
+                    };
                 }
                 b => panic!("Invalid byte {}", b as char),
             };

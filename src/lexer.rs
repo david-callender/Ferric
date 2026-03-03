@@ -161,6 +161,18 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                         Some(Token::Ident(ident))
                     };
                 }
+                x if x == b'"' => {
+                        let mut st = String::new();
+                        while let Some(s) = self.stream.peek() {
+                            st.push('"');
+                            if *s == b'"'{
+                                st.push(*s as char);
+                                break;
+                            }
+                            st.push(*s as char);
+                            self.stream.next();
+                        }
+                    }
                 b => panic!("Invalid byte {}", b as char),
             };
         }

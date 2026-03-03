@@ -78,13 +78,11 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn call_function(&mut self, ident: RuntimeVal, args: Vec<RuntimeVal>) -> RuntimeVal {
-        match ident {
+    fn call_function(&mut self, func_name: RuntimeVal, args: Vec<RuntimeVal>) -> RuntimeVal {
+        match func_name {
             RuntimeVal::Function(fn_name) => {
-                let print_func = String::from("print");
-
-                match fn_name {
-                    print_func => {
+                match fn_name.as_str() {
+                    "print" => {
                         let [first] = &args[..] else { panic!() };
                         writeln!(self.output, "{:?}", args);
                         RuntimeVal::Null

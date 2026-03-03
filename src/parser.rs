@@ -5,6 +5,7 @@ use crate::{interpreter::RuntimeVal, lexer::Token};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(RuntimeVal),
+    Ident(String),
     Binary {
         left: Box<Expr>,
         operation: BinaryOp,
@@ -15,7 +16,7 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Call {
-        name: String,
+        callee: Box<Expr>,
         args: Vec<Expr>,
     },
 }

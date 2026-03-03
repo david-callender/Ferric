@@ -89,16 +89,16 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_multiply_divide(&mut self) -> Expr {
-        let left = self.parse_basic();
+        let left = self.parse_func_call();
         if self.matches(Token::Star) {
-            let right = self.parse_basic();
+            let right = self.parse_func_call();
             return Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Multiply,
                 right: Box::new(right),
             };
         } else if self.matches(Token::Slash) {
-            let right = self.parse_basic();
+            let right = self.parse_func_call();
             return Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Divide,
@@ -108,12 +108,46 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         left
     }
 
+    // consume_args also consumes the closing paren of the
+    // arguments list, but assumes that the opening paren has
+    // already been parsed.
+    fn consume_args(&mut self) -> Vec<Expr> {
+        let mut args_vec = vec![];
+
+        while self.matches(Token::Comma)
+            || (self
+                .stream
+                .peek()
+                .is_some_and(|tok| tok != &Token::CloseParen))
+        {
+            args_vec.push(self.parse());
+        }
+        self.consume(Token::CloseParen, "Function call parentheses not closed");
+
+        args_vec
+    }
+
+    fn parse_func_call(&mut self) -> Expr {
+        let mut func_call = self.parse_basic();
+
+        while self.matches(Token::OpenParen) {
+            let args_list = self.consume_args();
+            func_call = Expr::Call {
+                callee: Box::new(func_call),
+                args: args_list,
+            };
+        }
+
+        func_call
+    }
+
     fn parse_basic(&mut self) -> Expr {
         let token = self.stream.next().expect("expected basic token, got none");
         match token {
             Token::OpenParen => self.parse_paren(),
             Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
+            Token::Ident(identifier) => Expr::Ident(identifier),
             _ => panic!("expected basic token, got non-basic token"),
         }
     }
@@ -198,6 +232,56 @@ mod tests {
             operation: BinaryOp::Divide,
             right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
         };
+        assert_eq!(parser.parse(), target);
+    }
+
+    #[test]
+    pub fn test_simple_funcall() {
+        let mut parser = Parser::new(
+            [
+                Token::Ident("my_func".to_string()),
+                Token::OpenParen,
+                Token::CloseParen,
+            ]
+            .into_iter(),
+        );
+
+        let target = Expr::Call {
+            callee: Box::new(Expr::Ident("my_func".to_string())),
+            args: vec![],
+        };
+
+        assert_eq!(parser.parse(), target);
+    }
+
+    #[test]
+    pub fn test_complex_funcall() {
+        let mut parser = Parser::new(
+            [
+                Token::Ident("my_func".to_string()),
+                Token::OpenParen,
+                Token::NumLit(42.0),
+                Token::Comma,
+                Token::NumLit(88.0),
+                Token::CloseParen,
+                Token::OpenParen,
+                Token::StringLit("dingus".to_string()),
+                Token::CloseParen,
+            ]
+            .into_iter(),
+        );
+
+        let target = Expr::Call {
+            callee: Box::new(Expr::Call {
+                callee: Box::new(Expr::Ident("my_func".to_string())),
+                args: vec![
+                    Expr::Literal(RuntimeVal::Number(42.0)),
+                    Expr::Literal(RuntimeVal::Number(88.0)),
+                ],
+            }),
+            args: vec![Expr::Literal(RuntimeVal::String("dingus".to_string()))],
+        };
+
         assert_eq!(parser.parse(), target);
     }
 }

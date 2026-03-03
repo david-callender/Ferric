@@ -14,6 +14,10 @@ pub enum Expr {
         operation: UnaryOp,
         right: Box<Expr>,
     },
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -73,6 +73,35 @@ pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
 }
 
+impl<I: Iterator<Item = u8>> Lexer<I> {
+    fn matching(&mut self, first: u8) -> Token {
+        let second = self.stream.peek();
+        match (first, second) {
+            (b'=', Some(b'=')) => {
+                self.stream.next();
+                Token::EqEq
+            }
+            (b'<', Some(b'=')) => {
+                self.stream.next();
+                Token::LessEq
+            }
+            (b'>', Some(b'=')) => {
+                self.stream.next();
+                Token::GreaterEq
+            }
+            (b'!', Some(b'=')) => {
+                self.stream.next();
+                Token::BangEq
+            }
+            (b'=', _) => Token::Eq,
+            (b'<', _) => Token::Less,
+            (b'>', _) => Token::Greater,
+            (b'!', _) => Token::Bang,
+            _ => panic!("Invalid byte {}", first as char),
+        }
+    }
+}
+
 impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
@@ -92,6 +121,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                 b'-' => return Some(Token::Minus),
                 b'*' => return Some(Token::Star),
                 b'/' => return Some(Token::Slash),
+                b'=' | b'!' | b'<' | b'>' => return Some(self.matching(c)),
                 x if x.is_ascii_digit() => {
                     let mut num = String::new();
                     num.push(x as char);

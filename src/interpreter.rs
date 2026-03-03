@@ -108,7 +108,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     UnaryOp::Negate => self.unary_negate(right_val),
                     UnaryOp::BitNot => self.unary_bit_not(right_val),
                 }
-            }
+            },
+	    _ => todo!(),
         }
     }
 

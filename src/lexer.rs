@@ -161,20 +161,30 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                         Some(Token::Ident(ident))
                     };
                 }
-                x if x == b'"' => {
-                        let mut st = String::new();
-                        while let Some(s) = self.stream.peek() {
-                            st.push('"');
-                            if *s == b'"'{
-                                st.push(*s as char);
-                                break;
-                            }
-                            st.push(*s as char);
-                            self.stream.next();
+                b'"' => {
+                    let mut st = String::new();
+                    loop {
+                    let s = self.stream.next().expect("expected closing quote, got none");
+                        if s == b'"' {
+                            return Some(Token::StringLit(st));
                         }
+                        if s == b'\\'{
+                            let esc = self.stream.next().expect("expected escape sequence, got none");
+                            match esc {
+                                b'n' => st.push('\n'),
+                                b't' => st.push('\t'),
+                                b'r' => st.push('\r'),
+                                b'"' => st.push('"'),
+                                b'\\' => st.push('\\'),
+                                _ => panic!("Invalid escape sequence"),
+                            }
+                            continue;
+                        }
+                        st.push(s as char);
                     }
+                }
                 b => panic!("Invalid byte {}", b as char),
-            };
+            }
         }
     }
 }

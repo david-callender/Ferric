@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable};
+use std::{collections::HashMap, iter::Peekable, u8};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -162,25 +162,30 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                     };
                 }
                 b'"' => {
-                    let mut st = String::new();
+                    let mut st = Vec::new();
                     loop {
-                    let s = self.stream.next().expect("expected closing quote, got none");
+                        let s = self.stream.next().expect("unterminated string literal");
                         if s == b'"' {
+                            let st =
+                                String::from_utf8(st).expect("invalid UTF-8 in string literal");
                             return Some(Token::StringLit(st));
                         }
-                        if s == b'\\'{
-                            let esc = self.stream.next().expect("expected escape sequence, got none");
+                        if s == b'\\' {
+                            let esc = self
+                                .stream
+                                .next()
+                                .expect("expected escape sequence, got none");
                             match esc {
-                                b'n' => st.push('\n'),
-                                b't' => st.push('\t'),
-                                b'r' => st.push('\r'),
-                                b'"' => st.push('"'),
-                                b'\\' => st.push('\\'),
-                                _ => panic!("Invalid escape sequence"),
+                                b'n' => st.push(b'\n'),
+                                b't' => st.push(b'\t'),
+                                b'r' => st.push(b'\r'),
+                                b'"' => st.push(b'"'),
+                                b'\\' => st.push(b'\\'),
+                                _ => panic!("Invalid escape sequence \\{}", s as char),
                             }
                             continue;
                         }
-                        st.push(s as char);
+                        st.push(s);
                     }
                 }
                 b => panic!("Invalid byte {}", b as char),

@@ -83,8 +83,15 @@ impl<'a, W: Write> Interpreter<'a, W> {
             RuntimeVal::Function(fn_name) => {
                 match fn_name.as_str() {
                     "print" => {
-                        let [first] = &args[..] else { panic!() };
-                        writeln!(self.output, "{}", first);
+                        // TODO: How to do format strings here, at some point
+
+                        if args.is_empty() {
+                            writeln!(self.output).expect("Failed to write to output");
+                        } else {
+                            for val in args {
+                                writeln!(self.output, "{val}").expect("Failed to write to output");
+                            }
+                        }
                         RuntimeVal::Null
                     }
                     _ => panic!(""),

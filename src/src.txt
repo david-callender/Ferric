@@ -1,1 +1,1 @@
-otherwise
+print()

@@ -86,14 +86,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
                         // TODO: How to do format strings here, at some point
 
                         if args.is_empty() {
-                            if let Err(e) = writeln!(self.output) {
-                                panic!("{e}")
-                            }
+                            writeln!(self.output).expect("Failed to write to output");
                         } else {
                             for val in args {
-                                if let Err(e) = writeln!(self.output, "{val}") {
-                                    panic!("{e}")
-                                }
+                                writeln!(self.output, "{val}").expect("Failed to write to output");
                             }
                         }
                         RuntimeVal::Null

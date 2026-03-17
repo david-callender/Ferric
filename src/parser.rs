@@ -114,15 +114,16 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     fn consume_args(&mut self) -> Vec<Expr> {
         let mut args_vec = vec![];
 
-        while self.matches(Token::Comma)
-            || (self
-                .stream
-                .peek()
-                .is_some_and(|tok| tok != &Token::CloseParen))
-        {
+        if !self.matches(Token::CloseParen) {
             args_vec.push(self.parse());
+            while self.matches(Token::Comma) {
+                args_vec.push(self.parse());
+            }
+            self.consume(
+                Token::CloseParen,
+                "Unclosed function call parentheses or missing comma",
+            );
         }
-        self.consume(Token::CloseParen, "Function call parentheses not closed");
 
         args_vec
     }

@@ -213,3 +213,84 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use Token as T;
+
+    fn collect_tokens(src: &str) -> Vec<Token> {
+        Lexer::new(src.bytes()).collect()
+    }
+
+    #[test]
+    fn one_byte() {
+        assert_eq!(
+            collect_tokens("(){};,+-*/"),
+            vec![
+                T::OpenParen,
+                T::CloseParen,
+                T::OpenBracket,
+                T::CloseBracket,
+                T::Semi,
+                T::Comma,
+                T::Plus,
+                T::Minus,
+                T::Star,
+                T::Slash
+            ]
+        );
+    }
+
+    #[test]
+    fn two_byte() {
+        assert_eq!(
+            collect_tokens("=== = == = <<=< >>=>  !=!"),
+            vec![
+                T::EqEq,
+                T::Eq,
+                T::Eq,
+                T::EqEq,
+                T::Eq,
+                T::Less,
+                T::LessEq,
+                T::Less,
+                T::Greater,
+                T::GreaterEq,
+                T::Greater,
+                T::BangEq,
+                T::Bang,
+            ]
+        );
+    }
+
+    #[test]
+    fn number_lit() {
+        assert_eq!(collect_tokens("1"), vec![T::NumLit(1.0)]);
+        assert_eq!(collect_tokens("1.0"), vec![T::NumLit(1.0)]);
+        assert_eq!(collect_tokens("001.000"), vec![T::NumLit(1.0)]);
+        assert_eq!(collect_tokens("0.1"), vec![T::NumLit(0.1)]);
+        assert_eq!(
+            collect_tokens("1234567890"),
+            vec![T::NumLit(1_234_567_890.0)]
+        );
+    }
+
+    #[test]
+    fn ident() {
+        assert_eq!(collect_tokens("hello"), vec![T::Ident("hello".to_string())]);
+        assert_eq!(collect_tokens("and"), vec![T::LAnd]);
+    }
+
+    #[test]
+    fn string_lit() {
+        assert_eq!(
+            collect_tokens("\"string lit\""),
+            vec![T::StringLit("string lit".to_string())]
+        );
+        assert_eq!(
+            collect_tokens("\"string\\n\\tlit\""),
+            vec![T::StringLit("string\n\tlit".to_string())]
+        );
+    }
+}

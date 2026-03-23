@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, u8};
+use std::{collections::HashMap, iter::Peekable};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -63,7 +63,7 @@ impl std::fmt::Display for Token {
             Token::LOr => write!(f, "or"),
             Token::Bang => write!(f, "!"),
             Token::StringLit(n) => write!(f, "{n}"),
-            Token::NumLit(n) => write!(f, "\"{n}\""),
+            Token::NumLit(n) => write!(f, r#""{n}""#),
             Token::Ident(n) => write!(f, "ident[{n}]"),
         }
     }
@@ -74,7 +74,7 @@ pub struct Lexer<I: Iterator<Item = u8>> {
 }
 
 impl<I: Iterator<Item = u8>> Lexer<I> {
-    fn matching(&mut self, first: u8) -> Token {
+    fn lex_multi_byte(&mut self, first: u8) -> Token {
         let second = self.stream.peek();
         match (first, second) {
             (b'=', Some(b'=')) => {
@@ -100,6 +100,75 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             _ => panic!("Invalid byte {}", first as char),
         }
     }
+
+    fn lex_number_lit(&mut self, first: u8) -> Token {
+        let mut num = String::new();
+        num.push(first as char);
+        while let Some(a) = self.stream.peek() {
+            if a.is_ascii_digit() || *a == b'.' {
+                num.push(*a as char);
+                self.stream.next();
+            } else {
+                break;
+            }
+        }
+        Token::NumLit(num.parse::<f64>().expect("invalid number literal"))
+    }
+
+    fn lex_ident(&mut self, first: u8) -> Token {
+        let keywords = HashMap::from([
+            ("let", Token::Let),
+            ("let", Token::Let),
+            ("if", Token::If),
+            ("elseif", Token::Elseif),
+            ("otherwise", Token::Otherwise),
+            ("while", Token::While),
+            ("fn", Token::Fn),
+            ("and", Token::LAnd),
+            ("or", Token::LOr),
+        ]);
+        let mut ident_bytes = vec![first];
+        while let Some(b) = self.stream.peek()
+            && (b.is_ascii_alphanumeric() || *b == b'_')
+        {
+            ident_bytes.push(*b);
+            self.stream.next();
+        }
+        let ident = String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
+
+        if let Some(keyword) = keywords.get(ident.as_str()) {
+            keyword.clone()
+        } else {
+            Token::Ident(ident)
+        }
+    }
+
+    fn lex_string_lit(&mut self) -> Token {
+        let mut st = Vec::new();
+        loop {
+            let s = self.stream.next().expect("unterminated string literal");
+            if s == b'"' {
+                let st = String::from_utf8(st).expect("invalid UTF-8 in string literal");
+                return Token::StringLit(st);
+            }
+            if s == b'\\' {
+                let esc = self
+                    .stream
+                    .next()
+                    .expect("expected escape sequence, got none");
+                match esc {
+                    b'n' => st.push(b'\n'),
+                    b't' => st.push(b'\t'),
+                    b'r' => st.push(b'\r'),
+                    b'"' => st.push(b'"'),
+                    b'\\' => st.push(b'\\'),
+                    _ => panic!("Invalid escape sequence \\{}", s as char),
+                }
+                continue;
+            }
+            st.push(s);
+        }
+    }
 }
 
 impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
@@ -110,86 +179,29 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
             if c.is_ascii_whitespace() {
                 continue;
             }
-            match c {
-                b'(' => return Some(Token::OpenParen),
-                b')' => return Some(Token::CloseParen),
-                b'{' => return Some(Token::OpenBracket),
-                b'}' => return Some(Token::CloseBracket),
-                b';' => return Some(Token::Semi),
-                b',' => return Some(Token::Comma),
-                b'+' => return Some(Token::Plus),
-                b'-' => return Some(Token::Minus),
-                b'*' => return Some(Token::Star),
-                b'/' => return Some(Token::Slash),
-                b'=' | b'!' | b'<' | b'>' => return Some(self.matching(c)),
-                x if x.is_ascii_digit() => {
-                    let mut num = String::new();
-                    num.push(x as char);
-                    while let Some(a) = self.stream.peek() {
-                        if a.is_ascii_digit() || *a == b'.' {
-                            num.push(*a as char);
-                            self.stream.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    return Some(Token::NumLit(num.parse::<f64>().unwrap()));
-                }
-                x if x.is_ascii_alphabetic() || x == b'_' => {
-                    let keywords = HashMap::from([
-                        ("let", Token::Let),
-                        ("let", Token::Let),
-                        ("if", Token::If),
-                        ("elseif", Token::Elseif),
-                        ("otherwise", Token::Otherwise),
-                        ("while", Token::While),
-                        ("fn", Token::Fn),
-                    ]);
-                    let mut ident_bytes = vec![x];
-                    while let Some(b) = self.stream.peek()
-                        && (b.is_ascii_alphanumeric() || *b == b'_')
-                    {
-                        ident_bytes.push(*b);
-                        self.stream.next();
-                    }
-                    let ident =
-                        String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
 
-                    return if let Some(keyword) = keywords.get(ident.as_str()) {
-                        Some(keyword.clone())
-                    } else {
-                        Some(Token::Ident(ident))
-                    };
-                }
-                b'"' => {
-                    let mut st = Vec::new();
-                    loop {
-                        let s = self.stream.next().expect("unterminated string literal");
-                        if s == b'"' {
-                            let st =
-                                String::from_utf8(st).expect("invalid UTF-8 in string literal");
-                            return Some(Token::StringLit(st));
-                        }
-                        if s == b'\\' {
-                            let esc = self
-                                .stream
-                                .next()
-                                .expect("expected escape sequence, got none");
-                            match esc {
-                                b'n' => st.push(b'\n'),
-                                b't' => st.push(b'\t'),
-                                b'r' => st.push(b'\r'),
-                                b'"' => st.push(b'"'),
-                                b'\\' => st.push(b'\\'),
-                                _ => panic!("Invalid escape sequence \\{}", s as char),
-                            }
-                            continue;
-                        }
-                        st.push(s);
-                    }
-                }
+            let tok = match c {
+                b'(' => Token::OpenParen,
+                b')' => Token::CloseParen,
+                b'{' => Token::OpenBracket,
+                b'}' => Token::CloseBracket,
+                b';' => Token::Semi,
+                b',' => Token::Comma,
+                b'+' => Token::Plus,
+                b'-' => Token::Minus,
+                b'*' => Token::Star,
+                b'/' => Token::Slash,
+
+                b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c),
+
+                x if x.is_ascii_digit() => self.lex_number_lit(x),
+                x if x.is_ascii_alphabetic() || x == b'_' => self.lex_ident(x),
+                b'"' => self.lex_string_lit(),
+
                 b => panic!("Invalid byte {}", b as char),
-            }
+            };
+
+            return Some(tok);
         }
     }
 }

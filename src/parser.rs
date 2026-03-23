@@ -19,6 +19,13 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
     },
+    Decl {
+        value: Box<Expr>,
+        slot: usize,
+    },
+    VarGet {
+        slot: usize,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

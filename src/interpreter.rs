@@ -143,6 +143,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 self.call_function(func_caller, args)
             }
             Expr::Ident(name) => RuntimeVal::Function(name.clone()),
+            Expr::Decl { value, slot } => todo!(),
+            Expr::VarGet { slot } => todo!(),
         }
     }
 

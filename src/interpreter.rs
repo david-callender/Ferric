@@ -32,7 +32,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
     pub fn new(output: &'a mut W, var_storage_size: usize) -> Self {
         Self {
             output,
-            var_storage: Vec::with_capacity(var_storage_size),
+            var_storage: vec![RuntimeVal::Null; var_storage_size],
         }
     }
 
@@ -152,7 +152,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
             Expr::Decl { value, slot } => {
                 let val = self.evaluate(value);
-                self.var_storage.insert(*slot, val);
+                let var = self.var_storage.get_mut(*slot).expect("Unable to fetch variable");
+                *var = val;
                 RuntimeVal::Null
             }
             Expr::VarGet { slot } => self.var_storage[*slot].clone(),

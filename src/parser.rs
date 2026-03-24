@@ -34,6 +34,12 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    Equal,
+    NotEqual,
+    GreaterThan,
+    LessThan,
+    GreaterEq,
+    LessEq,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +73,14 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
+    fn is_one_of<const N: usize>(&mut self, expected: [Token; N]) -> Option<Token> {
+        if self.stream.peek().is_some_and(|tok| expected.contains(tok)) {
+            return Some(self.stream.next().unwrap());
+        }
+	drop(expected);
+        None
+    }
+
     fn consume(&mut self, expected: Token, message: &str) -> Token {
         let token = self.stream.next().expect("expected token, got none");
         assert_eq!(token, expected, "{message}");
@@ -97,7 +111,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         if self.matches(Token::Let) {
             self.parse_decl()
         } else {
-            self.parse_add_subtract()
+            self.parse_comparisons()
         }
     }
 
@@ -115,6 +129,33 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         };
         self.next_index += 1;
         expr
+    }
+
+    fn parse_comparisons(&mut self) -> Expr {
+        let left = self.parse_add_subtract();
+        let operation = match self.is_one_of([
+            Token::Greater,
+            Token::GreaterEq,
+            Token::Less,
+            Token::LessEq,
+            Token::EqEq,
+            Token::BangEq,
+        ]) {
+	    Some(Token::EqEq) => BinaryOp::Equal,
+	    Some(Token::BangEq) => BinaryOp::NotEqual,
+	    Some(Token::Less) => BinaryOp::LessThan,
+	    Some(Token::LessEq) => BinaryOp::LessEq,
+	    Some(Token::Greater) => BinaryOp::GreaterThan,
+	    Some(Token::GreaterEq) => BinaryOp::GreaterEq,
+	    Some(_) => unreachable!(),
+	    None => return left,
+	};
+	let right = self.parse_add_subtract();
+	Expr::Binary {
+	    left: Box::new(left),
+	    operation,
+	    right: Box::new(right),
+	}
     }
 
     fn parse_add_subtract(&mut self) -> Expr {
@@ -389,6 +430,7 @@ mod tests {
         assert_eq!(parser.parse_expr(), target);
     }
 
+    
     pub fn test_unary_and_minus() {
         let mut parser = Parser::new(
             [
@@ -436,4 +478,6 @@ mod tests {
 
         assert_eq!(parser.parse_expr(), target);
     }
+
+    
 }

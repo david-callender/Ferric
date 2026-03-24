@@ -374,7 +374,7 @@ mod tests {
             right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
         };
 
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
@@ -386,7 +386,7 @@ mod tests {
             right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
         };
 
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     pub fn test_unary_and_minus() {
@@ -409,7 +409,7 @@ mod tests {
             right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
         };
 
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     pub fn test_unary_with_parens() {
@@ -434,6 +434,6 @@ mod tests {
             }),
         };
 
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 }

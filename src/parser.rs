@@ -83,7 +83,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         if self.stream.peek().is_some_and(|tok| expected.contains(tok)) {
             return Some(self.stream.next().unwrap());
         }
-	drop(expected);
+        drop(expected);
         None
     }
 
@@ -148,21 +148,21 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Token::EqEq,
             Token::BangEq,
         ]) {
-	    Some(Token::EqEq) => BinaryOp::Equal,
-	    Some(Token::BangEq) => BinaryOp::NotEqual,
-	    Some(Token::Less) => BinaryOp::LessThan,
-	    Some(Token::LessEq) => BinaryOp::LessEq,
-	    Some(Token::Greater) => BinaryOp::GreaterThan,
-	    Some(Token::GreaterEq) => BinaryOp::GreaterEq,
-	    Some(_) => unreachable!(),
-	    None => return left,
-	};
-	let right = self.parse_add_subtract();
-	Expr::Binary {
-	    left: Box::new(left),
-	    operation,
-	    right: Box::new(right),
-	}
+            Some(Token::EqEq) => BinaryOp::Equal,
+            Some(Token::BangEq) => BinaryOp::NotEqual,
+            Some(Token::Less) => BinaryOp::LessThan,
+            Some(Token::LessEq) => BinaryOp::LessEq,
+            Some(Token::Greater) => BinaryOp::GreaterThan,
+            Some(Token::GreaterEq) => BinaryOp::GreaterEq,
+            Some(_) => unreachable!(),
+            None => return left,
+        };
+        let right = self.parse_add_subtract();
+        Expr::Binary {
+            left: Box::new(left),
+            operation,
+            right: Box::new(right),
+        }
     }
 
     fn parse_add_subtract(&mut self) -> Expr {
@@ -487,5 +487,61 @@ mod tests {
         assert_eq!(parser.parse_expr(), target);
     }
 
-    
+    #[test]
+    pub fn test_comparisons() {
+        let comparison_operations = [
+            (Token::EqEq, BinaryOp::Equal),
+            (Token::BangEq, BinaryOp::NotEqual),
+            (Token::Greater, BinaryOp::GreaterThan),
+            (Token::Less, BinaryOp::LessThan),
+            (Token::GreaterEq, BinaryOp::GreaterEq),
+            (Token::LessEq, BinaryOp::LessEq),
+        ];
+
+        for tok_and_expected in comparison_operations {
+            let mut parser = Parser::new(
+                [Token::NumLit(3.0), tok_and_expected.0, Token::NumLit(4.0)].into_iter(),
+            );
+
+            let target = Expr::Binary {
+                left: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+                operation: tok_and_expected.1,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
+            };
+
+            assert_eq!(parser.parse_expr(), target);
+        }
+    }
+
+    #[test]
+    pub fn test_comparison_order() {
+        let mut parser = Parser::new(
+            [
+                Token::NumLit(3.0),
+                Token::Plus,
+                Token::NumLit(3.0),
+                Token::EqEq,
+                Token::NumLit(9.0),
+                Token::Minus,
+                Token::NumLit(3.0),
+            ]
+            .into_iter(),
+        );
+
+        let target = Expr::Binary {
+            left: Box::new(Expr::Binary {
+                left: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+                operation: BinaryOp::Add,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+            }),
+            operation: BinaryOp::Equal,
+            right: Box::new(Expr::Binary {
+                left: Box::new(Expr::Literal(RuntimeVal::Number(9.0))),
+                operation: BinaryOp::Subtract,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+            }),
+        };
+
+        assert_eq!(parser.parse_expr(), target);
+    }
 }

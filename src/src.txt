@@ -1,1 +1,3 @@
-"Some string"
+print(a)
+a = 5
+

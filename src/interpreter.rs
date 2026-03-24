@@ -179,7 +179,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn unary_bit_not(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
             RuntimeVal::Number(n) => {
-                assert!(n.fract() != 0.0, "You can't bang a float!"); // TODO : Update Error messages
+                assert!(n.fract() == 0.0, "You can't bang a float!"); // TODO : Update Error messages
                 RuntimeVal::Number(!(n as i64) as f64)
             }
             _ => panic!("You can't not not negate that (number)!"), // TODO : Update error messages
@@ -348,6 +348,8 @@ mod tests {
             (BinaryOp::Equal, n1 == n2),
             #[allow(clippy::float_cmp)]
             (BinaryOp::NotEqual, n1 != n2),
+            (BinaryOp::GreaterEq, n1 >= n2),
+            (BinaryOp::LessEq, n1 <= n2)
         
         ];
 
@@ -366,4 +368,61 @@ mod tests {
 
 
     }
+
+    #[test]
+    pub fn test_unary_int() {
+        // bit not on numbers
+        let mut out = stdout();
+        
+        #[warn(clippy::useless_vec)]
+        let test_ans = vec![
+            (UnaryOp::BitNot, 0.0, -1.0), // operation, input, expected answer
+            (UnaryOp::BitNot, 1.0, -2.0), // TODO: NEGATION OF FLOATS?
+            (UnaryOp::BitNot, 2e9, -2_000_000_001.0),
+        ];
+
+        for (op, input, ans) in test_ans {
+            let expr = Expr::Unary{
+                operation: op,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(input))),
+            };
+        
+            let mut interpreter = Interpreter::new(&mut out, 0);
+            let res = interpreter.evaluate(&expr);
+
+            assert_eq!(res, RuntimeVal::Number(ans));
+        }
+
+        
+    }
+
+    #[test]
+    pub fn test_unary_bool() {
+        let mut out = stdout();
+
+        let f = false;
+        let t = true;
+
+        let test_ans = vec![
+            (UnaryOp::Negate, f, !f), // operation, input, expected answer
+            (UnaryOp::Negate, t, !t),
+        ];
+
+        for (op, input, ans) in test_ans {
+
+            let expr = Expr::Unary{
+                operation: op,
+                right: Box::new(Expr::Literal(RuntimeVal::Boolean(input))),
+            };
+        
+            let mut interpreter = Interpreter::new(&mut out, 0);
+            let res = interpreter.evaluate(&expr);
+
+            assert_eq!(res, RuntimeVal::Boolean(ans));
+
+        }
+        
+    }
+
+    
 }

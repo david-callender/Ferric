@@ -25,12 +25,15 @@ impl Display for RuntimeVal {
 
 pub struct Interpreter<'a, W: Write> {
     output: &'a mut W,
-    var_stack: Vec<RuntimeVal>
+    var_stack: Vec<RuntimeVal>,
 }
 
 impl<'a, W: Write> Interpreter<'a, W> {
     pub fn new(output: &'a mut W, var_stack_size: usize) -> Self {
-        Self { output, var_stack: Vec::with_capacity(var_stack_size) }
+        Self {
+            output,
+            var_stack: Vec::with_capacity(var_stack_size),
+        }
     }
 
     fn operation_add(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
@@ -90,10 +93,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                             writeln!(self.output).expect("Failed to write to output");
                         } else {
                             for val in args {
-                         
                                 writeln!(self.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
-      
-                                
                             }
                         }
                         RuntimeVal::Null
@@ -145,29 +145,26 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 let args = args.iter().map(|expr| self.evaluate(expr)).collect();
 
                 self.call_function(func_caller, args)
-            },
+            }
             Expr::Ident(name) => {
                 // check if function exists
                 RuntimeVal::Function(name.clone())
-            },
+            }
             Expr::Decl { value, slot } => {
                 let val = self.evaluate(value);
                 self.var_stack.insert(*slot, val);
                 RuntimeVal::Null
-            },
-            Expr::VarGet { slot } => {
-                self.var_stack[*slot].clone()
-            },
+            }
+            Expr::VarGet { slot } => self.var_stack[*slot].clone(),
         }
     }
 
-    pub fn interpret(&mut self, expressions: Vec<&Expr>) {
+    pub fn interpret(&mut self, expressions: &Vec<Expr>) {
         // expr - head of ast tree
         // prints out the RuntimeVal of expr
-        
+
         for exp in expressions {
             self.evaluate(exp);
         }
     }
-
 }

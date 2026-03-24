@@ -14,7 +14,7 @@ pub fn ferric_main(source: &str) {
 
     let mut output = stdout();
 
-    let mut interpreter = Interpreter::new(&mut output,0);
+    let mut interpreter = Interpreter::new(&mut output, 0);
     interpreter.interpret(&expr);
 }
 
@@ -27,7 +27,7 @@ mod tests {
 
         let mut output = vec![];
 
-        Interpreter::new(&mut output,0).interpret(&expr);
+        Interpreter::new(&mut output, 0).interpret(&expr);
 
         String::from_utf8(output).expect("Program outputted invalid utf8")
     }

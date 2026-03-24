@@ -34,10 +34,10 @@ mod tests {
 
     #[test]
     fn basic() {
-        assert_eq!(harness("print(4)"), "4\n");
-        assert_eq!(harness("print(4 + 5)"), "9\n");
-        assert_eq!(harness("print(4 * 5)"), "20\n");
-        assert_eq!(harness("print(7 + 4 * 5)"), "27\n");
-        assert_eq!(harness("print((7 + 4) * 5)"), "55\n");
+        assert_eq!(harness("print(4);"), "4\n");
+        assert_eq!(harness("print(4 + 5);"), "9\n");
+        assert_eq!(harness("print(4 * 5);"), "20\n");
+        assert_eq!(harness("print(7 + 4 * 5);"), "27\n");
+        assert_eq!(harness("print((7 + 4) * 5);"), "55\n");
     }
 }

@@ -152,7 +152,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
             Expr::Decl { value, slot } => {
                 let val = self.evaluate(value);
-                let var = self.var_storage.get_mut(*slot).expect("Unable to fetch variable");
+                let var = self
+                    .var_storage
+                    .get_mut(*slot)
+                    .expect("Unable to fetch variable");
                 *var = val;
                 RuntimeVal::Null
             }

@@ -1,4 +1,7 @@
-let a = 4;
-let b = 5;
-print(a);
-print(b);
+if 1 {
+    print("one");
+    "one";
+} otherwise if 2 {
+    print("two");
+    "two";
+};

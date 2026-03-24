@@ -222,7 +222,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         let token = self.stream.next().expect("expected basic token, got none");
         match token {
             Token::OpenParen => self.parse_paren(),
-            Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
+            Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string.into())),
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
             Token::Ident(identifier) => self
                 .find_var(&identifier)
@@ -256,7 +256,7 @@ mod tests {
         let mut parser = Parser::new([Token::StringLit("dingus".to_string())].into_iter());
         assert_eq!(
             parser.parse_expr(),
-            Expr::Literal(RuntimeVal::String("dingus".to_string()))
+            Expr::Literal(RuntimeVal::String("dingus".to_string().into()))
         );
     }
 
@@ -359,7 +359,7 @@ mod tests {
                     Expr::Literal(RuntimeVal::Number(88.0)),
                 ],
             }),
-            args: vec![Expr::Literal(RuntimeVal::String("dingus".to_string()))],
+            args: vec![Expr::Literal(RuntimeVal::String("dingus".to_string().into()))],
         };
 
         assert_eq!(parser.parse_expr(), target);

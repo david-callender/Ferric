@@ -1,11 +1,11 @@
-use std::{fmt::Display, io::Write};
+use std::{fmt::Display, io::Write, rc::Rc};
 
 use crate::parser::{BinaryOp, Expr, UnaryOp};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
     Number(f64),
-    String(String),
+    String(Rc<str>),
     Boolean(bool),
     Function(String),
     Null,
@@ -40,8 +40,9 @@ impl<'a, W: Write> Interpreter<'a, W> {
         match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 + n2),
             (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
-                s1.push_str(&s2);
-                RuntimeVal::String(s1)
+                let res = format!("{s1} + {s2}");
+
+                RuntimeVal::String(res.into())
             }
             _ => panic!("You can't add those, idiot!"), // TODO: Update error messages
         }
@@ -53,9 +54,9 @@ impl<'a, W: Write> Interpreter<'a, W> {
             (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
                 assert!(n.fract() != 0.0, "You can't multiply a string by a float!");
 
-                s1 = s1.repeat(n as usize);
+                let st = format!("{s1}").repeat(n as usize);
 
-                RuntimeVal::String(s1)
+                RuntimeVal::String(st.into())
             }
             _ => panic!("You can't multiply those, idiot!"), // TODO: Update error messages
         }

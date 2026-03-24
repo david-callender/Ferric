@@ -267,7 +267,7 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn test_literal() {
+    fn test_literal() {
         let mut out = stdout();
 
         let expr = Expr::Literal(RuntimeVal::Number(5.0));
@@ -279,7 +279,21 @@ mod tests {
     }
 
     #[test]
-    pub fn test_binary_ops_int() {
+     fn test_interpreter() {
+        let mut out = vec![];
+
+        let func_name = String::from("print");
+
+        let expr = Expr::Call {callee: Box::new(Expr::Ident(func_name)),args: vec![Expr::Literal(RuntimeVal::Number(5.0))]};
+
+        let mut interpreter = Interpreter::new(&mut out, 0);
+        let res = interpreter.evaluate(&expr);
+
+        assert_eq!(String::from_utf8(out).expect("failed to read from out"), String::from("5\n"));
+     }
+
+    #[test]
+    fn test_binary_ops_int() {
         let mut out = stdout();
 
         // test numbers
@@ -309,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_binary_ops_bool() {
+    fn test_binary_ops_bool() {
         let mut out = stdout();
 
         // test numbers
@@ -343,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_unary_int() {
+    fn test_unary_int() {
         // bit not on numbers
         let mut out = stdout();
 
@@ -368,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_unary_bool() {
+    fn test_unary_bool() {
         let mut out = stdout();
 
         let f = false;

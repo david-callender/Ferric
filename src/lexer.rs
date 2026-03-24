@@ -19,7 +19,7 @@ pub enum Token {
     BangEq,       // !=
     Plus,         // +
     Minus,        // -
-    Tilde,       // ~
+    Tilde,        // ~
     Star,         // *
     Slash,        // /
     Greater,      // >
@@ -54,7 +54,7 @@ impl std::fmt::Display for Token {
             Token::BangEq => write!(f, "!="),
             Token::Plus => write!(f, "+"),
             Token::Minus => write!(f, "-"),
-	    Token::Tilde => write!(f, "~"),
+            Token::Tilde => write!(f, "~"),
             Token::Star => write!(f, "*"),
             Token::Slash => write!(f, "/"),
             Token::Greater => write!(f, ">"),
@@ -193,7 +193,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                 b'-' => Token::Minus,
                 b'*' => Token::Star,
                 b'/' => Token::Slash,
-		b'~' => Token::Tilde,
+                b'~' => Token::Tilde,
 
                 b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c),
 

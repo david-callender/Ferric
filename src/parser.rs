@@ -81,12 +81,12 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         name
     }
 
-    pub fn parse(&mut self) -> Vec<Expr> {
+    pub fn parse(&mut self) -> (Vec<Expr>, usize) {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
             exprs.push(self.parse_expr())
         }
-        exprs
+        (exprs, self.next_index)
     }
 
     fn parse_expr(&mut self) -> Expr {

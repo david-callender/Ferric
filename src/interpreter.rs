@@ -25,14 +25,14 @@ impl Display for RuntimeVal {
 
 pub struct Interpreter<'a, W: Write> {
     output: &'a mut W,
-    var_stack: Vec<RuntimeVal>,
+    var_storage: Vec<RuntimeVal>,
 }
 
 impl<'a, W: Write> Interpreter<'a, W> {
-    pub fn new(output: &'a mut W, var_stack_size: usize) -> Self {
+    pub fn new(output: &'a mut W, var_storage_size: usize) -> Self {
         Self {
             output,
-            var_stack: Vec::with_capacity(var_stack_size),
+            var_storage: Vec::with_capacity(var_storage_size),
         }
     }
 
@@ -152,10 +152,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
             Expr::Decl { value, slot } => {
                 let val = self.evaluate(value);
-                self.var_stack.insert(*slot, val);
+                self.var_storage.insert(*slot, val);
                 RuntimeVal::Null
             }
-            Expr::VarGet { slot } => self.var_stack[*slot].clone(),
+            Expr::VarGet { slot } => self.var_storage[*slot].clone(),
         }
     }
 

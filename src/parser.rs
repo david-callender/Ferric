@@ -26,6 +26,12 @@ pub enum Expr {
     VarGet {
         slot: usize,
     },
+    If {
+        cond: Box<Expr>,
+        then: Box<Expr>,
+        otherwise: Box<Expr>,
+    },
+    Block(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

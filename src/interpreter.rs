@@ -160,6 +160,12 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 RuntimeVal::Null
             }
             Expr::VarGet { slot } => self.var_storage[*slot].clone(),
+            Expr::If {
+                cond,
+                then,
+                otherwise,
+            } => todo!(),
+            Expr::Block(_) => todo!(),
         }
     }
 

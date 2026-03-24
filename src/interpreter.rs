@@ -131,7 +131,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     BinaryOp::Subtract => self.operation_subtract(left_val, right_val),
                     BinaryOp::Multiply => self.operation_multiply(left_val, right_val),
                     BinaryOp::Divide => self.operation_divide(left_val, right_val),
-		    _ => todo!(),
+					_ => todo!(),
                 }
             }
             Expr::Unary { operation, right } => {

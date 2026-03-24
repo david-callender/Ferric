@@ -75,12 +75,82 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
+    
+
     fn unary_negate(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
             RuntimeVal::Boolean(b) => RuntimeVal::Boolean(!b),
             _ => panic!("You can't not not negate that!"), // TODO : Update error messages
         }
     }
+
+    fn operation_equal(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
+                RuntimeVal::Boolean(n1 == n2)
+            },
+            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            _ => {
+                panic!("Tried to compare non-numbers!")
+            }
+        }
+    }
+    fn operation_neq(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
+                RuntimeVal::Boolean(n1 != n2)
+            },
+            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            _ => {
+                panic!("Tried to compare non-numbers!")
+            }
+        }
+    }
+    fn operation_greater_than(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
+                RuntimeVal::Boolean(n1 > n2)
+            },
+            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            _ => {
+                panic!("Tried to compare non-numbers!")
+            }
+        }
+    }
+    fn operation_less_than(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
+                RuntimeVal::Boolean(n1 < n2)
+            },
+            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            _ => {
+                panic!("Tried to compare non-numbers!")
+            }
+        }
+    }
+    fn operation_geq(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
+                RuntimeVal::Boolean(n1 >= n2)
+            },
+            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            _ => {
+                panic!("Tried to compare non-numbers!")
+            }
+        }
+    }
+    fn operation_leq(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
+                RuntimeVal::Boolean(n1 <= n2)
+            },
+            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            _ => {
+                panic!("Tried to compare non-numbers!")
+            }
+        }
+    }
+    
 
     fn call_function(&mut self, func_name: RuntimeVal, args: Vec<RuntimeVal>) -> RuntimeVal {
         match func_name {
@@ -104,6 +174,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             _ => panic!("Invalid function call"),
         }
     }
+
 
     fn unary_bit_not(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
@@ -131,6 +202,12 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     BinaryOp::Subtract => self.operation_subtract(left_val, right_val),
                     BinaryOp::Multiply => self.operation_multiply(left_val, right_val),
                     BinaryOp::Divide => self.operation_divide(left_val, right_val),
+                    BinaryOp::Equal => self.operation_equal(left_val, right_val),
+                    BinaryOp::NotEqual => self.operation_neq(left_val, right_val),
+                    BinaryOp::GreaterThan => self.operation_greater_than(left_val, right_val),
+                    BinaryOp::LessThan => self.operation_less_than(left_val, right_val),
+                    BinaryOp::GreaterEq => self.operation_geq(left_val, right_val),
+                    BinaryOp::LessEq => self.operation_leq(left_val, right_val),
                 }
             }
             Expr::Unary { operation, right } => {
@@ -170,8 +247,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     RuntimeVal::Boolean(b) => {
                         if b {
                             self.evaluate(then)
+                        } else if let Some(ow_branch) = otherwise {
+                            self.evaluate(ow_branch)
                         } else {
-                            self.evaluate(otherwise)
+                            RuntimeVal::Null
                         }
                     }
                     _ => {
@@ -196,5 +275,95 @@ impl<'a, W: Write> Interpreter<'a, W> {
         for exp in expressions {
             self.evaluate(exp);
         }
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use std::io::stdout;
+
+    use super::*;
+
+    
+    #[test]
+    pub fn test_literal() {
+        let mut out = stdout();
+
+        let expr = Expr::Literal(RuntimeVal::Number(5.0));
+        
+    
+        let mut interpreter = Interpreter::new(&mut out, 0);
+        let res = interpreter.evaluate(&expr);
+
+        assert_eq!(res, RuntimeVal::Number(5.0));
+    }
+
+    #[test]
+    pub fn test_binary_ops_int() {
+        let mut out = stdout();
+
+        // test numbers
+        let n1 = 5.0;
+        let n2 = 5.0;
+
+        // operations and respective expected answers
+        let test_ans = vec![
+            (BinaryOp::Add, n1 + n2),
+            (BinaryOp::Subtract, n1 - n2),
+            (BinaryOp::Multiply, n1 * n2),
+            (BinaryOp::Divide, n1 / n2),
+    
+        ];
+
+        let mut interpreter = Interpreter::new(&mut out, 0);
+
+        for (op, ans) in test_ans {
+            let expr = Expr::Binary {  
+                left: Box::new(Expr::Literal(RuntimeVal::Number(n1))),
+                operation: op, // just clone to get the values. Definitely not best practice
+                right: Box::new(Expr::Literal(RuntimeVal::Number(n2)))
+            };
+
+            let res = interpreter.evaluate(&expr);
+            assert_eq!(res, RuntimeVal::Number(ans));
+        }
+
+    }
+
+    #[test]
+    pub fn test_binary_ops_bool() {
+        let mut out = stdout();
+
+        // test numbers
+        let n1 = 6.0;
+        let n2 = 5.0;
+
+        // operations and respective expected answers
+        let test_ans = vec![
+            (BinaryOp::GreaterThan, n1 > n2),
+            (BinaryOp::LessThan, n1 < n2),
+            #[allow(clippy::float_cmp)]
+            (BinaryOp::Equal, n1 == n2),
+            #[allow(clippy::float_cmp)]
+            (BinaryOp::NotEqual, n1 != n2),
+        
+        ];
+
+        let mut interpreter = Interpreter::new(&mut out, 0);
+
+        for (op, ans) in test_ans {
+            let expr = Expr::Binary {  
+                left: Box::new(Expr::Literal(RuntimeVal::Number(n1))),
+                operation: op, // just clone to get the values. Definitely not best practice
+                right: Box::new(Expr::Literal(RuntimeVal::Number(n2)))
+            };
+
+            let res = interpreter.evaluate(&expr);
+            assert_eq!(res, RuntimeVal::Boolean(ans));
+        }
+
+
     }
 }

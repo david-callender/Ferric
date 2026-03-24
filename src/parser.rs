@@ -29,7 +29,7 @@ pub enum Expr {
     If {
         cond: Box<Expr>,
         then: Box<Expr>,
-        otherwise: Box<Expr>,
+        otherwise: Option<Box<Expr>>,
     },
     Block(Vec<Expr>),
 }
@@ -40,6 +40,12 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    Equal,
+    NotEqual,
+    GreaterThan,
+    LessThan,
+    GreaterEq,
+    LessEq,
 }
 
 #[derive(Debug, Clone, PartialEq)]

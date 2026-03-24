@@ -164,14 +164,34 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 cond,
                 then,
                 otherwise,
-            } => todo!(),
-            Expr::Block(_) => todo!(),
+            } => {
+                let eval_cond = self.evaluate(cond);
+                match eval_cond {
+                    RuntimeVal::Boolean(b) => {
+                        if b {
+                            self.evaluate(then)
+                        } else {
+                            self.evaluate(otherwise)
+                        }
+                    }
+                    _ => {
+                        panic!("Tried to read non-boolean expression as condition");
+                    }
+                }
+            },
+            Expr::Block(expressions) => {
+                // returns Null on empty block
+                let mut last_val = RuntimeVal::Null;
+                for exp in expressions {
+                    last_val = self.evaluate(exp);
+                }
+                last_val
+
+            },
         }
     }
 
     pub fn interpret(&mut self, expressions: &Vec<Expr>) {
-        // expr - head of ast tree
-        // prints out the RuntimeVal of expr
 
         for exp in expressions {
             self.evaluate(exp);

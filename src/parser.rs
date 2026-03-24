@@ -84,7 +84,8 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     pub fn parse(&mut self) -> (Vec<Expr>, usize) {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
-            exprs.push(self.parse_expr())
+            exprs.push(self.parse_expr());
+            self.consume(Token::Semi, "Expected ';' after expression");
         }
         (exprs, self.next_index)
     }
@@ -389,6 +390,7 @@ mod tests {
         assert_eq!(parser.parse_expr(), target);
     }
 
+    #[test]
     pub fn test_unary_and_minus() {
         let mut parser = Parser::new(
             [
@@ -405,13 +407,14 @@ mod tests {
                 operation: UnaryOp::Negate,
                 right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
             }),
-            operation: BinaryOp::Add,
+            operation: BinaryOp::Subtract,
             right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
         };
 
         assert_eq!(parser.parse_expr(), target);
     }
 
+    #[test]
     pub fn test_unary_with_parens() {
         let mut parser = Parser::new(
             [

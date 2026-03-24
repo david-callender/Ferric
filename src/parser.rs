@@ -507,6 +507,15 @@ mod tests {
 
     #[test]
     fn test_block() {
+        // empty
+        let parsed =
+            Parser::new([Token::OpenBracket, Token::CloseBracket, Token::Semi].into_iter())
+                .parse_expr();
+
+        let target = Expr::Block(vec![]);
+
+        assert_eq!(parsed, target);
+
         // one, return last
         let parsed = Parser::new(
             [

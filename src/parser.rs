@@ -29,7 +29,7 @@ pub enum Expr {
     If {
         cond: Box<Expr>,
         then: Box<Expr>,
-        otherwise: Box<Expr>,
+        otherwise: Option<Box<Expr>>,
     },
     Block(Vec<Expr>),
 }
@@ -103,6 +103,8 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     fn parse_keywords(&mut self) -> Expr {
         if self.matches(Token::Let) {
             self.parse_decl()
+        } else if self.matches(Token::If) {
+            self.parse_if()
         } else {
             self.parse_add_subtract()
         }
@@ -122,6 +124,54 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         };
         self.next_index += 1;
         expr
+    }
+
+    fn parse_if(&mut self) -> Expr {
+        let cond = self.parse_expr();
+        self.consume(Token::OpenBracket, "Expected '{' after if condition");
+
+        let then = self.parse_block();
+
+        let otherwise = if self.matches(Token::Otherwise) {
+            let otherwise = if self.matches(Token::OpenBracket) {
+                self.parse_block()
+            } else if self.matches(Token::If) {
+                self.parse_if()
+            } else {
+                panic!("Expected '{{' or 'if' after 'otherwise'");
+            };
+
+            Some(Box::new(otherwise))
+        } else {
+            None
+        };
+
+        Expr::If {
+            cond: Box::new(cond),
+            then: Box::new(then),
+            otherwise,
+        }
+    }
+
+    // assumes the leading Token::OpenBracket has already been consumed.
+    fn parse_block(&mut self) -> Expr {
+        if self.matches(Token::CloseBracket) {
+            return Expr::Block(vec![]);
+        }
+
+        let mut exprs = vec![self.parse_expr()];
+        while self.matches(Token::Semi) {
+            if self.matches(Token::CloseBracket) {
+                exprs.push(Expr::Literal(RuntimeVal::Null));
+                return Expr::Block(exprs);
+            }
+            exprs.push(self.parse_expr());
+        }
+        self.consume(
+            Token::CloseBracket,
+            "Expected '}' after block. Check for a missing semicolon on the previous line",
+        );
+        Expr::Block(exprs)
     }
 
     fn parse_add_subtract(&mut self) -> Expr {

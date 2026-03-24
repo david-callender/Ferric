@@ -11,11 +11,13 @@ pub fn ferric_main(source: &str) {
 
     let mut parser = Parser::new(lexer);
     let (expr, var_storage_size) = parser.parse();
+    
+    println!("{expr:?}");
 
     let mut output = stdout();
 
     let mut interpreter = Interpreter::new(&mut output, var_storage_size);
-    interpreter.interpret(&expr);
+    // interpreter.interpret(&expr);
 }
 
 #[cfg(test)]

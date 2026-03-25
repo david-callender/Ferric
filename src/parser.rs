@@ -25,7 +25,7 @@ pub enum Expr {
     },
     VarGet {
         slot: usize,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -73,6 +73,38 @@ pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
 }
 
+fn parse_number(str: &str) -> f64 {
+    let mut num = 0.0;
+    let mut i: i32 = -1;
+    let mut after_dec = false;
+    let mut frac_appears = false;
+
+    assert!(!str.starts_with('.'), "Missing leading zero"); //Curently .1 will panic due to '.' being an invalid byte, but this will be useful later
+
+    for b in str.bytes() {
+        if b == b'.' {
+            after_dec = true;
+            continue;
+        }
+        if b.is_ascii_digit() {
+            let n = f64::from(b - b'0');
+            if after_dec {
+                num += n * 10f64.powi(i);
+                i -= 1;
+                frac_appears = true;
+            } else {
+                num *= 10.0;
+                num += n;
+            }
+        }
+    }
+    assert!(
+        (!after_dec || frac_appears),
+        "No numbers detected after decimal"
+    );
+    num
+}
+
 impl<I: Iterator<Item = u8>> Lexer<I> {
     fn lex_multi_byte(&mut self, first: u8) -> Token {
         let second = self.stream.peek();
@@ -112,7 +144,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
                 break;
             }
         }
-        Token::NumLit(num.parse::<f64>().expect("invalid number literal"))
+        Token::NumLit(parse_number(&num))
     }
 
     fn lex_ident(&mut self, first: u8) -> Token {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable};
+use std::{collections::HashMap, iter::Peekable, vec};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -75,6 +75,39 @@ pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
 }
 
+fn parse_number(digits: Vec<u8>) -> f64 {
+    let mut num = 0.0;
+    let mut i: i32 = -1;
+    let mut after_dec = false;
+    let mut frac_appears = false;
+
+    assert!(digits[0] != b'.', "Missing leading zero"); //Curently .1 will panic due to '.' being an invalid byte, but this will be useful later
+
+    for b in digits {
+        if b == b'.' {
+            assert!(!after_dec, "Multiple decimal points in number");
+            after_dec = true;
+            continue;
+        }
+        if b.is_ascii_digit() {
+            let n = f64::from(b - b'0');
+            if after_dec {
+                num += n * 10f64.powi(i);
+                i -= 1;
+                frac_appears = true;
+            } else {
+                num *= 10.0;
+                num += n;
+            }
+        }
+    }
+    assert!(
+        (!after_dec || frac_appears),
+        "No numbers detected after decimal"
+    );
+    num
+}
+
 impl<I: Iterator<Item = u8>> Lexer<I> {
     fn lex_multi_byte(&mut self, first: u8) -> Token {
         let second = self.stream.peek();
@@ -104,17 +137,17 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
     }
 
     fn lex_number_lit(&mut self, first: u8) -> Token {
-        let mut num = String::new();
-        num.push(first as char);
+        let mut num = Vec::new();
+        num.push(first);
         while let Some(a) = self.stream.peek() {
             if a.is_ascii_digit() || *a == b'.' {
-                num.push(*a as char);
+                num.push(*a);
                 self.stream.next();
             } else {
                 break;
             }
         }
-        Token::NumLit(num.parse::<f64>().expect("invalid number literal"))
+        Token::NumLit(parse_number(num))
     }
 
     fn lex_ident(&mut self, first: u8) -> Token {

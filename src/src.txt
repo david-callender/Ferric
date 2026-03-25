@@ -1,7 +1,7 @@
-if 1 {
+if 1 == 0 {
     print("one");
     "one";
-} otherwise if 2 {
+} otherwise if 2 == 0 {
     print("two");
     "two";
 };

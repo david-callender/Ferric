@@ -279,18 +279,24 @@ mod tests {
     }
 
     #[test]
-     fn test_interpreter() {
+    fn test_interpreter() {
         let mut out = vec![];
 
         let func_name = String::from("print");
 
-        let expr = Expr::Call {callee: Box::new(Expr::Ident(func_name)),args: vec![Expr::Literal(RuntimeVal::Number(5.0))]};
+        let expr = Expr::Call {
+            callee: Box::new(Expr::Ident(func_name)),
+            args: vec![Expr::Literal(RuntimeVal::Number(5.0))],
+        };
 
         let mut interpreter = Interpreter::new(&mut out, 0);
         let res = interpreter.evaluate(&expr);
 
-        assert_eq!(String::from_utf8(out).expect("failed to read from out"), String::from("5\n"));
-     }
+        assert_eq!(
+            String::from_utf8(out).expect("failed to read from out"),
+            String::from("5\n")
+        );
+    }
 
     #[test]
     fn test_binary_ops_int() {

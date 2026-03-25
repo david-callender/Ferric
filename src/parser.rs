@@ -143,7 +143,6 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         expr
     }
 
-
     fn parse_if(&mut self) -> Expr {
         let cond = self.parse_expr();
         self.consume(Token::OpenBracket, "Expected '{' after if condition");
@@ -196,7 +195,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         );
         self.env.pop().expect("misaligned environment stack");
         Expr::Block(exprs)
-  }
+    }
 
     fn parse_comparisons(&mut self) -> Expr {
         let left = self.parse_add_subtract();
@@ -728,7 +727,7 @@ mod tests {
         };
 
         assert_eq!(parsed, target);
-  }
+    }
     pub fn test_comparisons() {
         let comparison_operations = [
             (Token::EqEq, BinaryOp::Equal),

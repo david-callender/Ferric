@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable};
+use std::{collections::HashMap, iter::Peekable, vec};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -75,16 +75,17 @@ pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
 }
 
-fn parse_number(str: &str) -> f64 {
+fn parse_number(digits: Vec<u8>) -> f64 {
     let mut num = 0.0;
     let mut i: i32 = -1;
     let mut after_dec = false;
     let mut frac_appears = false;
 
-    assert!(!str.starts_with('.'), "Missing leading zero"); //Curently .1 will panic due to '.' being an invalid byte, but this will be useful later
+    assert!(digits[0] != b'.', "Missing leading zero"); //Curently .1 will panic due to '.' being an invalid byte, but this will be useful later
 
-    for b in str.bytes() {
+    for b in digits {
         if b == b'.' {
+            assert!(!after_dec, "Multiple decimal points in number");
             after_dec = true;
             continue;
         }
@@ -136,17 +137,17 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
     }
 
     fn lex_number_lit(&mut self, first: u8) -> Token {
-        let mut num = String::new();
-        num.push(first as char);
+        let mut num = Vec::new();
+        num.push(first);
         while let Some(a) = self.stream.peek() {
             if a.is_ascii_digit() || *a == b'.' {
-                num.push(*a as char);
+                num.push(*a);
                 self.stream.next();
             } else {
                 break;
             }
         }
-        Token::NumLit(parse_number(&num))
+        Token::NumLit(parse_number(num))
     }
 
     fn lex_ident(&mut self, first: u8) -> Token {

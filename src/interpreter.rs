@@ -39,8 +39,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn operation_add(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
         match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 + n2),
-            (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
-                let res = format!("{s1} + {s2}");
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => {
+                let res = format!("{s1}{s2}");
 
                 RuntimeVal::String(res.into())
             }

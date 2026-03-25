@@ -1,4 +1,4 @@
-use std::iter::Peekable;
+use std::{collections::HashMap, iter::Peekable};
 
 use crate::{interpreter::RuntimeVal, lexer::Token};
 
@@ -26,6 +26,12 @@ pub enum Expr {
     VarGet {
         slot: usize,
     },
+    If {
+        cond: Box<Expr>,
+        then: Box<Expr>,
+        otherwise: Box<Expr>,
+    },
+    Block(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +40,12 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    Equal,
+    NotEqual,
+    GreaterThan,
+    LessThan,
+    GreaterEq,
+    LessEq,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,12 +56,16 @@ pub enum UnaryOp {
 
 pub struct Parser<I: Iterator<Item = Token>> {
     stream: Peekable<I>,
+    next_index: usize,
+    env: Vec<HashMap<String, usize>>,
 }
 
 impl<I: Iterator<Item = Token>> Parser<I> {
     pub fn new(stream: I) -> Self {
         Self {
             stream: stream.peekable(),
+            next_index: 0,
+            env: vec![HashMap::new()], // global
         }
     }
 
@@ -63,6 +79,14 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
+    fn is_one_of<const N: usize>(&mut self, expected: [Token; N]) -> Option<Token> {
+        if self.stream.peek().is_some_and(|tok| expected.contains(tok)) {
+            return Some(self.stream.next().unwrap());
+        }
+        drop(expected);
+        None
+    }
+
     fn consume(&mut self, expected: Token, message: &str) -> Token {
         let token = self.stream.next().expect("expected token, got none");
         assert_eq!(token, expected, "{message}");
@@ -70,8 +94,75 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         token
     }
 
-    pub fn parse(&mut self) -> Expr {
-        self.parse_add_subtract()
+    fn consume_ident(&mut self, message: &str) -> String {
+        let Some(Token::Ident(name)) = self.stream.next() else {
+            panic!("{message}");
+        };
+        name
+    }
+
+    pub fn parse(&mut self) -> (Vec<Expr>, usize) {
+        let mut exprs = vec![];
+        while self.stream.peek().is_some() {
+            exprs.push(self.parse_expr());
+            self.consume(Token::Semi, "Expected ';' after expression");
+        }
+        (exprs, self.next_index)
+    }
+
+    fn parse_expr(&mut self) -> Expr {
+        self.parse_keywords()
+    }
+
+    fn parse_keywords(&mut self) -> Expr {
+        if self.matches(Token::Let) {
+            self.parse_decl()
+        } else {
+            self.parse_comparisons()
+        }
+    }
+
+    fn parse_decl(&mut self) -> Expr {
+        let name = self.consume_ident("Expected variable name after let");
+        self.consume(Token::Eq, "Expected '=' after let");
+        let init = self.parse_expr();
+        self.env
+            .last_mut()
+            .expect("no global env")
+            .insert(name, self.next_index);
+        let expr = Expr::Decl {
+            value: Box::new(init),
+            slot: self.next_index,
+        };
+        self.next_index += 1;
+        expr
+    }
+
+    fn parse_comparisons(&mut self) -> Expr {
+        let left = self.parse_add_subtract();
+        let operation = match self.is_one_of([
+            Token::Greater,
+            Token::GreaterEq,
+            Token::Less,
+            Token::LessEq,
+            Token::EqEq,
+            Token::BangEq,
+        ]) {
+            Some(Token::EqEq) => BinaryOp::Equal,
+            Some(Token::BangEq) => BinaryOp::NotEqual,
+            Some(Token::Less) => BinaryOp::LessThan,
+            Some(Token::LessEq) => BinaryOp::LessEq,
+            Some(Token::Greater) => BinaryOp::GreaterThan,
+            Some(Token::GreaterEq) => BinaryOp::GreaterEq,
+            Some(_) => unreachable!(),
+            None => return left,
+        };
+        let right = self.parse_add_subtract();
+        Expr::Binary {
+            left: Box::new(left),
+            operation,
+            right: Box::new(right),
+        }
     }
 
     fn parse_add_subtract(&mut self) -> Expr {
@@ -96,16 +187,16 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_multiply_divide(&mut self) -> Expr {
-        let left = self.parse_func_call();
+        let left = self.parse_unary_op();
         if self.matches(Token::Star) {
-            let right = self.parse_func_call();
+            let right = self.parse_unary_op();
             return Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Multiply,
                 right: Box::new(right),
             };
         } else if self.matches(Token::Slash) {
-            let right = self.parse_func_call();
+            let right = self.parse_unary_op();
             return Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Divide,
@@ -115,6 +206,23 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         left
     }
 
+    fn parse_unary_op(&mut self) -> Expr {
+        if self.matches(Token::Minus) {
+            let right = self.parse_func_call();
+            return Expr::Unary {
+                operation: UnaryOp::Negate,
+                right: Box::new(right),
+            };
+        } else if self.matches(Token::Tilde) {
+            let right = self.parse_func_call();
+            return Expr::Unary {
+                operation: UnaryOp::BitNot,
+                right: Box::new(right),
+            };
+        }
+        self.parse_func_call()
+    }
+
     // consume_args also consumes the closing paren of the
     // arguments list, but assumes that the opening paren has
     // already been parsed.
@@ -122,9 +230,9 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         let mut args_vec = vec![];
 
         if !self.matches(Token::CloseParen) {
-            args_vec.push(self.parse());
+            args_vec.push(self.parse_expr());
             while self.matches(Token::Comma) {
-                args_vec.push(self.parse());
+                args_vec.push(self.parse_expr());
             }
             self.consume(
                 Token::CloseParen,
@@ -149,21 +257,33 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         func_call
     }
 
+    fn find_var(&self, name: &String) -> Option<usize> {
+        for level in self.env.iter().rev() {
+            if let Some(index) = level.get(name) {
+                return Some(*index);
+            }
+        }
+        None
+    }
+
     fn parse_basic(&mut self) -> Expr {
         let token = self.stream.next().expect("expected basic token, got none");
         match token {
             Token::OpenParen => self.parse_paren(),
             Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
-            Token::Ident(identifier) => Expr::Ident(identifier),
-            _ => panic!("expected basic token, got non-basic token"),
+            Token::Ident(identifier) => self
+                .find_var(&identifier)
+                .map(|slot| Expr::VarGet { slot })
+                .unwrap_or(Expr::Ident(identifier)),
+            _ => panic!("expected basic token, got non-basic token {token}"),
         }
     }
 
     // parse_paren assumes that the initial OpenParen token has already
     // been consumed.
     fn parse_paren(&mut self) -> Expr {
-        let inner_expr = self.parse();
+        let inner_expr = self.parse_expr();
         self.consume(Token::CloseParen, "unclosed paren block");
         inner_expr
     }
@@ -176,14 +296,14 @@ mod tests {
     #[test]
     pub fn test_num_literal() {
         let mut parser = Parser::new([Token::NumLit(4.0)].into_iter());
-        assert_eq!(parser.parse(), Expr::Literal(RuntimeVal::Number(4.0)));
+        assert_eq!(parser.parse_expr(), Expr::Literal(RuntimeVal::Number(4.0)));
     }
 
     #[test]
     pub fn test_string_literal() {
         let mut parser = Parser::new([Token::StringLit("dingus".to_string())].into_iter());
         assert_eq!(
-            parser.parse(),
+            parser.parse_expr(),
             Expr::Literal(RuntimeVal::String("dingus".to_string()))
         );
     }
@@ -192,7 +312,7 @@ mod tests {
     pub fn test_parentheses() {
         let mut parser =
             Parser::new([Token::OpenParen, Token::NumLit(4.0), Token::CloseParen].into_iter());
-        assert_eq!(parser.parse(), Expr::Literal(RuntimeVal::Number(4.0)));
+        assert_eq!(parser.parse_expr(), Expr::Literal(RuntimeVal::Number(4.0)));
     }
 
     #[test]
@@ -204,7 +324,7 @@ mod tests {
             operation: BinaryOp::Add,
             right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
         };
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
@@ -216,7 +336,7 @@ mod tests {
             operation: BinaryOp::Subtract,
             right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
         };
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
@@ -228,7 +348,7 @@ mod tests {
             operation: BinaryOp::Multiply,
             right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
         };
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
@@ -240,7 +360,7 @@ mod tests {
             operation: BinaryOp::Divide,
             right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
         };
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
@@ -259,7 +379,7 @@ mod tests {
             args: vec![],
         };
 
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
@@ -290,6 +410,138 @@ mod tests {
             args: vec![Expr::Literal(RuntimeVal::String("dingus".to_string()))],
         };
 
-        assert_eq!(parser.parse(), target);
+        assert_eq!(parser.parse_expr(), target);
+    }
+
+    #[test]
+    pub fn test_unary_minus() {
+        let mut parser = Parser::new([Token::Minus, Token::NumLit(6.0)].into_iter());
+
+        let target = Expr::Unary {
+            operation: UnaryOp::Negate,
+            right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
+        };
+
+        assert_eq!(parser.parse_expr(), target);
+    }
+
+    #[test]
+    pub fn test_unary_bitnot() {
+        let mut parser = Parser::new([Token::Tilde, Token::NumLit(6.0)].into_iter());
+
+        let target = Expr::Unary {
+            operation: UnaryOp::BitNot,
+            right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
+        };
+
+        assert_eq!(parser.parse_expr(), target);
+    }
+
+    #[test]
+    pub fn test_unary_and_minus() {
+        let mut parser = Parser::new(
+            [
+                Token::Minus,
+                Token::NumLit(6.0),
+                Token::Minus,
+                Token::NumLit(6.0),
+            ]
+            .into_iter(),
+        );
+
+        let target = Expr::Binary {
+            left: Box::new(Expr::Unary {
+                operation: UnaryOp::Negate,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
+            }),
+            operation: BinaryOp::Subtract,
+            right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
+        };
+
+        assert_eq!(parser.parse_expr(), target);
+    }
+
+    #[test]
+    pub fn test_unary_with_parens() {
+        let mut parser = Parser::new(
+            [
+                Token::Minus,
+                Token::OpenParen,
+                Token::NumLit(6.0),
+                Token::Plus,
+                Token::NumLit(6.0),
+                Token::CloseParen,
+            ]
+            .into_iter(),
+        );
+
+        let target = Expr::Unary {
+            operation: UnaryOp::Negate,
+            right: Box::new(Expr::Binary {
+                left: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
+                operation: BinaryOp::Add,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
+            }),
+        };
+
+        assert_eq!(parser.parse_expr(), target);
+    }
+
+    #[test]
+    pub fn test_comparisons() {
+        let comparison_operations = [
+            (Token::EqEq, BinaryOp::Equal),
+            (Token::BangEq, BinaryOp::NotEqual),
+            (Token::Greater, BinaryOp::GreaterThan),
+            (Token::Less, BinaryOp::LessThan),
+            (Token::GreaterEq, BinaryOp::GreaterEq),
+            (Token::LessEq, BinaryOp::LessEq),
+        ];
+
+        for tok_and_expected in comparison_operations {
+            let mut parser = Parser::new(
+                [Token::NumLit(3.0), tok_and_expected.0, Token::NumLit(4.0)].into_iter(),
+            );
+
+            let target = Expr::Binary {
+                left: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+                operation: tok_and_expected.1,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
+            };
+
+            assert_eq!(parser.parse_expr(), target);
+        }
+    }
+
+    #[test]
+    pub fn test_comparison_order() {
+        let mut parser = Parser::new(
+            [
+                Token::NumLit(3.0),
+                Token::Plus,
+                Token::NumLit(3.0),
+                Token::EqEq,
+                Token::NumLit(9.0),
+                Token::Minus,
+                Token::NumLit(3.0),
+            ]
+            .into_iter(),
+        );
+
+        let target = Expr::Binary {
+            left: Box::new(Expr::Binary {
+                left: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+                operation: BinaryOp::Add,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+            }),
+            operation: BinaryOp::Equal,
+            right: Box::new(Expr::Binary {
+                left: Box::new(Expr::Literal(RuntimeVal::Number(9.0))),
+                operation: BinaryOp::Subtract,
+                right: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
+            }),
+        };
+
+        assert_eq!(parser.parse_expr(), target);
     }
 }

@@ -25,11 +25,15 @@ impl Display for RuntimeVal {
 
 pub struct Interpreter<'a, W: Write> {
     output: &'a mut W,
+    var_storage: Vec<RuntimeVal>,
 }
 
 impl<'a, W: Write> Interpreter<'a, W> {
-    pub fn new(output: &'a mut W) -> Self {
-        Self { output }
+    pub fn new(output: &'a mut W, var_storage_size: usize) -> Self {
+        Self {
+            output,
+            var_storage: vec![RuntimeVal::Null; var_storage_size],
+        }
     }
 
     fn operation_add(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
@@ -89,7 +93,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                             writeln!(self.output).expect("Failed to write to output");
                         } else {
                             for val in args {
-                                writeln!(self.output, "{val}").expect("Failed to write to output");
+                                writeln!(self.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
                             }
                         }
                         RuntimeVal::Null
@@ -127,6 +131,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     BinaryOp::Subtract => self.operation_subtract(left_val, right_val),
                     BinaryOp::Multiply => self.operation_multiply(left_val, right_val),
                     BinaryOp::Divide => self.operation_divide(left_val, right_val),
+					_ => todo!(),
                 }
             }
             Expr::Unary { operation, right } => {
@@ -142,24 +147,35 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 self.call_function(func_caller, args)
             }
-            Expr::Ident(name) => RuntimeVal::Function(name.clone()),
-            Expr::Decl { value, slot } => todo!(),
-            Expr::VarGet { slot } => todo!(),
+            Expr::Ident(name) => {
+                // check if function exists
+                RuntimeVal::Function(name.clone())
+            }
+            Expr::Decl { value, slot } => {
+                let val = self.evaluate(value);
+                let var = self
+                    .var_storage
+                    .get_mut(*slot)
+                    .expect("Unable to fetch variable");
+                *var = val;
+                RuntimeVal::Null
+            }
+            Expr::VarGet { slot } => self.var_storage[*slot].clone(),
+            Expr::If {
+                cond,
+                then,
+                otherwise,
+            } => todo!(),
+            Expr::Block(_) => todo!(),
         }
     }
 
-    pub fn interpret(&mut self, expr: &Expr) {
+    pub fn interpret(&mut self, expressions: &Vec<Expr>) {
         // expr - head of ast tree
         // prints out the RuntimeVal of expr
-        let final_val = self.evaluate(expr);
 
-        match final_val {
-            RuntimeVal::Number(n) => writeln!(self.output, "{n}"),
-            RuntimeVal::String(s) => writeln!(self.output, "{s}"),
-            RuntimeVal::Boolean(b) => writeln!(self.output, "{b}"),
-            RuntimeVal::Function(n) => writeln!(self.output, "{n}"),
-            RuntimeVal::Null => writeln!(self.output, "Null"),
+        for exp in expressions {
+            self.evaluate(exp);
         }
-        .expect("Failed to write to output");
     }
 }

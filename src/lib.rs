@@ -4,6 +4,7 @@ use crate::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 
 mod interpreter;
 mod lexer;
+mod macros;
 mod parser;
 
 pub fn ferric_main(source: &str) {

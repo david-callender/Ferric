@@ -26,12 +26,12 @@ pub enum Expr {
     VarGet {
         slot: usize,
     },
+    Block(Vec<Expr>),
     If {
         cond: Box<Expr>,
         then: Box<Expr>,
         otherwise: Option<Box<Expr>>,
     },
-    Block(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,10 +55,9 @@ pub struct Parser<I: Iterator<Item = Token>> {
 }
 
 impl<I: Iterator<Item = Token>> Parser<I> {
-    // TODO: change stream to be IntoIter
-    pub fn new(stream: I) -> Self {
+    pub fn new<II: IntoIterator<IntoIter = I>>(stream: II) -> Self {
         Self {
-            stream: stream.peekable(),
+            stream: stream.into_iter().peekable(),
             next_index: 0,
             env: vec![HashMap::new()], // global
         }
@@ -309,382 +308,243 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{expr, one_token, tokens};
+
     use super::*;
 
     #[test]
     fn test_num_literal() {
-        let mut parser = Parser::new([Token::NumLit(4.0)].into_iter());
-        assert_eq!(parser.parse_expr(), Expr::Literal(RuntimeVal::Number(4.0)));
+        let mut parser = Parser::new(tokens!(NumLit(4.0)));
+        assert_eq!(parser.parse_expr(), expr!(NumLit(4.0)));
     }
 
     #[test]
     fn test_string_literal() {
-        let mut parser = Parser::new([Token::StringLit("dingus".to_string())].into_iter());
-        assert_eq!(
-            parser.parse_expr(),
-            Expr::Literal(RuntimeVal::String("dingus".to_string()))
-        );
+        let mut parser = Parser::new(tokens!(StrLit("dingus")));
+        assert_eq!(parser.parse_expr(), expr!(StrLit("dingus")));
     }
 
     #[test]
     fn test_parentheses() {
-        let mut parser =
-            Parser::new([Token::OpenParen, Token::NumLit(4.0), Token::CloseParen].into_iter());
-        assert_eq!(parser.parse_expr(), Expr::Literal(RuntimeVal::Number(4.0)));
+        let mut parser = Parser::new(tokens!(OpenParen, NumLit(4.0), CloseParen));
+        assert_eq!(parser.parse_expr(), expr!(NumLit(4.0)));
     }
 
     #[test]
     fn test_add() {
-        let mut parser =
-            Parser::new([Token::NumLit(4.0), Token::Plus, Token::NumLit(5.0)].into_iter());
-        let target = Expr::Binary {
-            left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
-            operation: BinaryOp::Add,
-            right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
-        };
+        let mut parser = Parser::new(tokens!(NumLit(4.0), Plus, NumLit(5.0)));
+        let target = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_subtract() {
-        let mut parser =
-            Parser::new([Token::NumLit(4.0), Token::Minus, Token::NumLit(5.0)].into_iter());
-        let target = Expr::Binary {
-            left: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
-            operation: BinaryOp::Subtract,
-            right: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
-        };
+        let mut parser = Parser::new(tokens!(NumLit(4.0), Minus, NumLit(5.0)));
+        let target = expr!(Binary(NumLit(4.0), Subtract, NumLit(5.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_multiply() {
-        let mut parser =
-            Parser::new([Token::NumLit(20.0), Token::Star, Token::NumLit(22.0)].into_iter());
-        let target = Expr::Binary {
-            left: Box::new(Expr::Literal(RuntimeVal::Number(20.0))),
-            operation: BinaryOp::Multiply,
-            right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
-        };
+        let mut parser = Parser::new(tokens!(NumLit(20.0), Star, NumLit(22.0)));
+        let target = expr!(Binary(NumLit(20.0), Multiply, NumLit(22.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_divide() {
-        let mut parser =
-            Parser::new([Token::NumLit(20.0), Token::Slash, Token::NumLit(22.0)].into_iter());
-        let target = Expr::Binary {
-            left: Box::new(Expr::Literal(RuntimeVal::Number(20.0))),
-            operation: BinaryOp::Divide,
-            right: Box::new(Expr::Literal(RuntimeVal::Number(22.0))),
-        };
+        let mut parser = Parser::new(tokens!(NumLit(20.0), Slash, NumLit(22.0)));
+        let target = expr!(Binary(NumLit(20.0), Divide, NumLit(22.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_simple_funcall() {
-        let mut parser = Parser::new(
-            [
-                Token::Ident("my_func".to_string()),
-                Token::OpenParen,
-                Token::CloseParen,
-            ]
-            .into_iter(),
-        );
-
-        let target = Expr::Call {
-            callee: Box::new(Expr::Ident("my_func".to_string())),
-            args: vec![],
-        };
-
+        let mut parser = Parser::new(tokens!(Ident("my_func"), OpenParen, CloseParen));
+        let target = expr!(Call(Ident("my_func"), []));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_complex_funcall() {
-        let mut parser = Parser::new(
-            [
-                Token::Ident("my_func".to_string()),
-                Token::OpenParen,
-                Token::NumLit(42.0),
-                Token::Comma,
-                Token::NumLit(88.0),
-                Token::CloseParen,
-                Token::OpenParen,
-                Token::StringLit("dingus".to_string()),
-                Token::CloseParen,
-            ]
-            .into_iter(),
-        );
-
-        let target = Expr::Call {
-            callee: Box::new(Expr::Call {
-                callee: Box::new(Expr::Ident("my_func".to_string())),
-                args: vec![
-                    Expr::Literal(RuntimeVal::Number(42.0)),
-                    Expr::Literal(RuntimeVal::Number(88.0)),
-                ],
-            }),
-            args: vec![Expr::Literal(RuntimeVal::String("dingus".to_string()))],
-        };
-
+        let mut parser = Parser::new(tokens!(
+            Ident("my_func".to_string()),
+            OpenParen,
+            NumLit(42.0),
+            Comma,
+            NumLit(88.0),
+            CloseParen,
+            OpenParen,
+            StringLit("dingus".to_string()),
+            CloseParen
+        ));
+        let target = expr!(Call(
+            Call(Ident("my_func"), [NumLit(42.0), NumLit(88.0)]),
+            [StrLit("dingus")]
+        ));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_unary_minus() {
-        let mut parser = Parser::new([Token::Minus, Token::NumLit(6.0)].into_iter());
-
-        let target = Expr::Unary {
-            operation: UnaryOp::Negate,
-            right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
-        };
-
+        let mut parser = Parser::new(tokens!(Minus, NumLit(6.0)));
+        let target = expr!(Unary(Negate, NumLit(6.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_unary_bitnot() {
-        let mut parser = Parser::new([Token::Tilde, Token::NumLit(6.0)].into_iter());
-
-        let target = Expr::Unary {
-            operation: UnaryOp::BitNot,
-            right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
-        };
-
+        let mut parser = Parser::new(tokens!(Tilde, NumLit(6.0)));
+        let target = expr!(Unary(BitNot, NumLit(6.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_unary_and_minus() {
-        let mut parser = Parser::new(
-            [
-                Token::Minus,
-                Token::NumLit(6.0),
-                Token::Minus,
-                Token::NumLit(6.0),
-            ]
-            .into_iter(),
-        );
-
-        let target = Expr::Binary {
-            left: Box::new(Expr::Unary {
-                operation: UnaryOp::Negate,
-                right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
-            }),
-            operation: BinaryOp::Subtract,
-            right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
-        };
-
+        let mut parser = Parser::new(tokens!(Minus, NumLit(6.0), Minus, NumLit(6.0)));
+        let target = expr!(Binary(Unary(Negate, NumLit(6.0)), Subtract, NumLit(6.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_unary_with_parens() {
-        let mut parser = Parser::new(
-            [
-                Token::Minus,
-                Token::OpenParen,
-                Token::NumLit(6.0),
-                Token::Plus,
-                Token::NumLit(6.0),
-                Token::CloseParen,
-            ]
-            .into_iter(),
-        );
-
-        let target = Expr::Unary {
-            operation: UnaryOp::Negate,
-            right: Box::new(Expr::Binary {
-                left: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
-                operation: BinaryOp::Add,
-                right: Box::new(Expr::Literal(RuntimeVal::Number(6.0))),
-            }),
-        };
-
+        let mut parser = Parser::new(tokens!(
+            Minus,
+            OpenParen,
+            NumLit(6.0),
+            Plus,
+            NumLit(6.0),
+            CloseParen
+        ));
+        let target = expr!(Unary(Negate, Binary(NumLit(6.0), Add, NumLit(6.0))));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_block() {
         // empty
-        let parsed =
-            Parser::new([Token::OpenBracket, Token::CloseBracket, Token::Semi].into_iter())
-                .parse_expr();
-
+        let mut parser = Parser::new(tokens!(OpenBracket, CloseBracket, Semi));
         let target = Expr::Block(vec![]);
-
-        assert_eq!(parsed, target);
+        assert_eq!(parser.parse_expr(), target);
 
         // one, return last
-        let parsed = Parser::new(
-            [
-                Token::OpenBracket,
-                Token::NumLit(4.0),
-                Token::CloseBracket,
-                Token::Semi,
-            ]
-            .into_iter(),
-        )
-        .parse_expr();
-
-        let target = Expr::Block(vec![Expr::Literal(RuntimeVal::Number(4.0))]);
-
-        assert_eq!(parsed, target);
+        let mut parser = Parser::new(tokens!(OpenBracket, NumLit(4.0), CloseBracket, Semi));
+        let target = expr!(Block { NumLit(4.0) });
+        assert_eq!(parser.parse_expr(), target);
 
         // one, don't return last
-        let parsed = Parser::new(
-            [
-                Token::OpenBracket,
-                Token::NumLit(4.0),
-                Token::Semi,
-                Token::CloseBracket,
-                Token::Semi,
-            ]
-            .into_iter(),
-        )
-        .parse_expr();
-
-        let target = Expr::Block(vec![
-            Expr::Literal(RuntimeVal::Number(4.0)),
-            Expr::Literal(RuntimeVal::Null),
-        ]);
-
-        assert_eq!(parsed, target);
+        let mut parser = Parser::new(tokens!(OpenBracket, NumLit(4.0), Semi, CloseBracket, Semi));
+        let target = expr!(Block {
+            NumLit(4.0),
+            Null()
+        });
+        assert_eq!(parser.parse_expr(), target);
 
         // many, return last
-        let parsed = Parser::new(
-            [
-                Token::OpenBracket,
-                Token::NumLit(4.0),
-                Token::Semi,
-                Token::NumLit(5.0),
-                Token::CloseBracket,
-                Token::Semi,
-            ]
-            .into_iter(),
-        )
-        .parse_expr();
-
-        let target = Expr::Block(vec![
-            Expr::Literal(RuntimeVal::Number(4.0)),
-            Expr::Literal(RuntimeVal::Number(5.0)),
-        ]);
-
-        assert_eq!(parsed, target);
+        let mut parser = Parser::new(tokens!(
+            OpenBracket,
+            NumLit(4.0),
+            Semi,
+            NumLit(5.0),
+            CloseBracket,
+            Semi
+        ));
+        let target = expr!(Block {
+            NumLit(4.0),
+            NumLit(5.0)
+        });
+        assert_eq!(parser.parse_expr(), target);
 
         // many, don't return last
-        let parsed = Parser::new(
-            [
-                Token::OpenBracket,
-                Token::NumLit(4.0),
-                Token::Semi,
-                Token::NumLit(5.0),
-                Token::Semi,
-                Token::CloseBracket,
-                Token::Semi,
-            ]
-            .into_iter(),
-        )
-        .parse_expr();
-
-        let target = Expr::Block(vec![
-            Expr::Literal(RuntimeVal::Number(4.0)),
-            Expr::Literal(RuntimeVal::Number(5.0)),
-            Expr::Literal(RuntimeVal::Null),
-        ]);
-
-        assert_eq!(parsed, target);
+        let mut parser = Parser::new(tokens!(
+            OpenBracket,
+            NumLit(4.0),
+            Semi,
+            NumLit(5.0),
+            Semi,
+            CloseBracket,
+            Semi
+        ));
+        let target = expr!(Block {
+            NumLit(4.0),
+            NumLit(5.0),
+            Null()
+        });
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
     fn test_if() {
         // if
-        let parsed = Parser::new(
-            [
-                Token::If,
-                Token::NumLit(1.0),
-                Token::OpenBracket,
-                Token::NumLit(4.0),
-                Token::CloseBracket,
-                Token::Semi,
-            ]
-            .into_iter(),
-        )
-        .parse_expr();
+        let mut parser = Parser::new(tokens!(
+            If,
+            NumLit(1.0),
+            OpenBracket,
+            NumLit(4.0),
+            CloseBracket,
+            Semi
+        ));
 
-        let target = Expr::If {
-            cond: Box::new(Expr::Literal(RuntimeVal::Number(1.0))),
-            then: Box::new(Expr::Block(vec![Expr::Literal(RuntimeVal::Number(4.0))])),
-            otherwise: None,
-        };
+        let target = expr!(If {
+            NumLit(1.0),
+            Block { NumLit(4.0) },
+            None
+        });
 
-        assert_eq!(parsed, target);
+        assert_eq!(parser.parse_expr(), target);
 
         // if otherwise
-        let parsed = Parser::new(
-            [
-                Token::If,
-                Token::NumLit(1.0),
-                Token::OpenBracket,
-                Token::NumLit(4.0),
-                Token::CloseBracket,
-                Token::Otherwise,
-                Token::OpenBracket,
-                Token::NumLit(5.0),
-                Token::CloseBracket,
-                Token::Semi,
-            ]
-            .into_iter(),
-        )
-        .parse_expr();
+        let mut parser = Parser::new(tokens!(
+            If,
+            NumLit(1.0),
+            OpenBracket,
+            NumLit(4.0),
+            CloseBracket,
+            Otherwise,
+            OpenBracket,
+            NumLit(5.0),
+            CloseBracket,
+            Semi
+        ));
 
-        let target = Expr::If {
-            cond: Box::new(Expr::Literal(RuntimeVal::Number(1.0))),
-            then: Box::new(Expr::Block(vec![Expr::Literal(RuntimeVal::Number(4.0))])),
-            otherwise: Some(Box::new(Expr::Block(vec![Expr::Literal(
-                RuntimeVal::Number(5.0),
-            )]))),
-        };
+        let target = expr!(If {
+            NumLit(1.0),
+            Block { NumLit(4.0) },
+            Block { NumLit(5.0) }
+        });
 
-        assert_eq!(parsed, target);
+        assert_eq!(parser.parse_expr(), target);
 
         // if otherwise-if otherwise
-        let parsed = Parser::new(
-            [
-                Token::If,
-                Token::NumLit(1.0),
-                Token::OpenBracket,
-                Token::NumLit(4.0),
-                Token::CloseBracket,
-                Token::Otherwise,
-                Token::If,
-                Token::NumLit(2.0),
-                Token::OpenBracket,
-                Token::NumLit(5.0),
-                Token::CloseBracket,
-                Token::Otherwise,
-                Token::OpenBracket,
-                Token::NumLit(6.0),
-                Token::CloseBracket,
-                Token::Semi,
-            ]
-            .into_iter(),
-        )
-        .parse_expr();
+        let mut parser = Parser::new(tokens!(
+            If,
+            NumLit(1.0),
+            OpenBracket,
+            NumLit(4.0),
+            CloseBracket,
+            Otherwise,
+            If,
+            NumLit(2.0),
+            OpenBracket,
+            NumLit(5.0),
+            CloseBracket,
+            Otherwise,
+            OpenBracket,
+            NumLit(6.0),
+            CloseBracket,
+            Semi
+        ));
 
-        let target = Expr::If {
-            cond: Box::new(Expr::Literal(RuntimeVal::Number(1.0))),
-            then: Box::new(Expr::Block(vec![Expr::Literal(RuntimeVal::Number(4.0))])),
-            otherwise: Some(Box::new(Expr::If {
-                cond: Box::new(Expr::Literal(RuntimeVal::Number(2.0))),
-                then: Box::new(Expr::Block(vec![Expr::Literal(RuntimeVal::Number(5.0))])),
-                otherwise: Some(Box::new(Expr::Block(vec![Expr::Literal(
-                    RuntimeVal::Number(6.0),
-                )]))),
-            })),
-        };
+        let target = expr!(If {
+            NumLit(1.0),
+            Block { NumLit(4.0) },
+            If {
+                NumLit(2.0),
+                Block { NumLit(5.0) },
+                Block { NumLit(6.0) }
+            }
+        });
 
-        assert_eq!(parsed, target);
+        assert_eq!(parser.parse_expr(), target);
     }
 }

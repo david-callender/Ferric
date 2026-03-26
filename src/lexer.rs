@@ -109,6 +109,12 @@ fn parse_number(digits: Vec<u8>) -> f64 {
 }
 
 impl<I: Iterator<Item = u8>> Lexer<I> {
+    pub fn new(stream: I) -> Self {
+        Self {
+            stream: stream.peekable(),
+        }
+    }
+
     fn lex_multi_byte(&mut self, first: u8) -> Token {
         let second = self.stream.peek();
         match (first, second) {
@@ -238,14 +244,6 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
             };
 
             return Some(tok);
-        }
-    }
-}
-
-impl<I: Iterator<Item = u8>> Lexer<I> {
-    pub fn new(stream: I) -> Self {
-        Self {
-            stream: stream.peekable(),
         }
     }
 }

@@ -13,7 +13,7 @@ macro_rules! one_token {
 
 #[macro_export]
 macro_rules! tokens {
-    ($($name:ident$(($($t:tt)*))?),*) => {
+    ($($name:ident$(($($t:tt)*))?),* $(,)?) => {
         {
             [
                 $(
@@ -31,6 +31,9 @@ macro_rules! expr {
     };
     (NumLit($n:expr)) => {
         Expr::Literal(RuntimeVal::Number($n))
+    };
+    (BoolLit($n:expr)) => {
+        Expr::Literal(RuntimeVal::Boolean($n))
     };
     (StrLit($s:expr)) => {
         Expr::Literal(RuntimeVal::String(String::from($s)))

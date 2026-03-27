@@ -262,12 +262,14 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::stdout;
+    use std::io::{sink, stdout};
+
+    use crate::expr;
 
     use super::*;
 
     #[test]
-    fn test_literal() {
+    fn literal() {
         let mut out = stdout();
 
         let expr = Expr::Literal(RuntimeVal::Number(5.0));
@@ -279,136 +281,87 @@ mod tests {
     }
 
     #[test]
-    fn test_interpreter() {
+    fn interpreter() {
         let mut out = vec![];
 
-        let func_name = String::from("print");
-
-        let expr = Expr::Call {
-            callee: Box::new(Expr::Ident(func_name)),
-            args: vec![Expr::Literal(RuntimeVal::Number(5.0))],
-        };
-
-        let mut interpreter = Interpreter::new(&mut out, 0);
-        let res = interpreter.evaluate(&expr);
-
-        assert_eq!(
-            String::from_utf8(out).expect("failed to read from out"),
-            String::from("5\n")
-        );
-    }
-
-    #[test]
-    fn test_binary_ops_int() {
-        let mut out = stdout();
-
-        // test numbers
-        let n1 = 5.0;
-        let n2 = 5.0;
-
-        // operations and respective expected answers
-        let test_ans = vec![
-            (BinaryOp::Add, n1 + n2),
-            (BinaryOp::Subtract, n1 - n2),
-            (BinaryOp::Multiply, n1 * n2),
-            (BinaryOp::Divide, n1 / n2),
+        let expr = vec![
+            expr!(Call(Ident("print"), [NumLit(4.0)])),
+            expr!(Call(Ident("print"), [NumLit(5.0)])),
         ];
 
         let mut interpreter = Interpreter::new(&mut out, 0);
+        interpreter.interpret(&expr);
 
-        for (op, ans) in test_ans {
-            let expr = Expr::Binary {
-                left: Box::new(Expr::Literal(RuntimeVal::Number(n1))),
-                operation: op, // just clone to get the values. Definitely not best practice
-                right: Box::new(Expr::Literal(RuntimeVal::Number(n2))),
-            };
-
-            let res = interpreter.evaluate(&expr);
-            assert_eq!(res, RuntimeVal::Number(ans));
-        }
+        assert_eq!(out, b"4\n5\n");
     }
 
     #[test]
-    fn test_binary_ops_bool() {
-        let mut out = stdout();
-
-        // test numbers
-        let n1 = 6.0;
-        let n2 = 5.0;
-
-        // operations and respective expected answers
-        let test_ans = vec![
-            (BinaryOp::GreaterThan, n1 > n2),
-            (BinaryOp::LessThan, n1 < n2),
-            #[allow(clippy::float_cmp)]
-            (BinaryOp::Equal, n1 == n2),
-            #[allow(clippy::float_cmp)]
-            (BinaryOp::NotEqual, n1 != n2),
-            (BinaryOp::GreaterEq, n1 >= n2),
-            (BinaryOp::LessEq, n1 <= n2),
-        ];
-
+    fn binary_ops_int() {
+        let mut out = sink();
         let mut interpreter = Interpreter::new(&mut out, 0);
 
-        for (op, ans) in test_ans {
-            let expr = Expr::Binary {
-                left: Box::new(Expr::Literal(RuntimeVal::Number(n1))),
-                operation: op, // just clone to get the values. Definitely not best practice
-                right: Box::new(Expr::Literal(RuntimeVal::Number(n2))),
-            };
+        let expr = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(9.0));
 
-            let res = interpreter.evaluate(&expr);
-            assert_eq!(res, RuntimeVal::Boolean(ans));
-        }
+        let expr = expr!(Binary(NumLit(4.0), Subtract, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(-1.0));
+
+        let expr = expr!(Binary(NumLit(4.0), Multiply, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(20.0));
+
+        let expr = expr!(Binary(NumLit(4.0), Divide, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(0.8));
     }
 
     #[test]
-    fn test_unary_int() {
+    fn binary_ops_bool() {
+        let mut out = sink();
+        let mut interpreter = Interpreter::new(&mut out, 0);
+
+        let expr = expr!(Binary(NumLit(4.0), GreaterThan, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(false));
+
+        let expr = expr!(Binary(NumLit(4.0), LessThan, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(true));
+
+        let expr = expr!(Binary(NumLit(4.0), Equal, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(false));
+
+        let expr = expr!(Binary(NumLit(4.0), NotEqual, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(true));
+
+        let expr = expr!(Binary(NumLit(4.0), GreaterEq, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(false));
+
+        let expr = expr!(Binary(NumLit(4.0), LessEq, NumLit(5.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(true));
+    }
+
+    #[test]
+    fn unary_int() {
         // bit not on numbers
-        let mut out = stdout();
+        let mut out = sink();
+        let mut interpreter = Interpreter::new(&mut out, 0);
 
-        #[warn(clippy::useless_vec)]
-        let test_ans = vec![
-            (UnaryOp::BitNot, 0.0, -1.0), // operation, input, expected answer
-            (UnaryOp::BitNot, 1.0, -2.0), // TODO: NEGATION OF FLOATS?
-            (UnaryOp::BitNot, 2e9, -2_000_000_001.0),
-        ];
+        let expr = expr!(Unary(BitNot, NumLit(0.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(-1.0));
 
-        for (op, input, ans) in test_ans {
-            let expr = Expr::Unary {
-                operation: op,
-                right: Box::new(Expr::Literal(RuntimeVal::Number(input))),
-            };
+        let expr = expr!(Unary(BitNot, NumLit(1.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(-2.0));
 
-            let mut interpreter = Interpreter::new(&mut out, 0);
-            let res = interpreter.evaluate(&expr);
-
-            assert_eq!(res, RuntimeVal::Number(ans));
-        }
+        let expr = expr!(Unary(BitNot, NumLit(-4.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(3.0));
     }
 
     #[test]
-    fn test_unary_bool() {
-        let mut out = stdout();
+    fn unary_bool() {
+        let mut out = sink();
+        let mut interpreter = Interpreter::new(&mut out, 0);
 
-        let f = false;
-        let t = true;
+        let expr = expr!(Unary(Negate, BoolLit(true)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(false));
 
-        let test_ans = vec![
-            (UnaryOp::Negate, f, !f), // operation, input, expected answer
-            (UnaryOp::Negate, t, !t),
-        ];
-
-        for (op, input, ans) in test_ans {
-            let expr = Expr::Unary {
-                operation: op,
-                right: Box::new(Expr::Literal(RuntimeVal::Boolean(input))),
-            };
-
-            let mut interpreter = Interpreter::new(&mut out, 0);
-            let res = interpreter.evaluate(&expr);
-
-            assert_eq!(res, RuntimeVal::Boolean(ans));
-        }
+        let expr = expr!(Unary(Negate, BoolLit(false)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(true));
     }
 }

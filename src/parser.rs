@@ -354,60 +354,60 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_num_literal() {
+    fn num_literal() {
         let mut parser = Parser::new(tokens!(NumLit(4.0)));
         assert_eq!(parser.parse_expr(), expr!(NumLit(4.0)));
     }
 
     #[test]
-    fn test_string_literal() {
+    fn string_literal() {
         let mut parser = Parser::new(tokens!(StrLit("dingus")));
         assert_eq!(parser.parse_expr(), expr!(StrLit("dingus")));
     }
 
     #[test]
-    fn test_parentheses() {
+    fn parentheses() {
         let mut parser = Parser::new(tokens!(OpenParen, NumLit(4.0), CloseParen));
         assert_eq!(parser.parse_expr(), expr!(NumLit(4.0)));
     }
 
     #[test]
-    fn test_add() {
+    fn add() {
         let mut parser = Parser::new(tokens!(NumLit(4.0), Plus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_subtract() {
+    fn subtract() {
         let mut parser = Parser::new(tokens!(NumLit(4.0), Minus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Subtract, NumLit(5.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_multiply() {
+    fn multiply() {
         let mut parser = Parser::new(tokens!(NumLit(20.0), Star, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Multiply, NumLit(22.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_divide() {
+    fn divide() {
         let mut parser = Parser::new(tokens!(NumLit(20.0), Slash, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Divide, NumLit(22.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_simple_funcall() {
+    fn simple_funcall() {
         let mut parser = Parser::new(tokens!(Ident("my_func"), OpenParen, CloseParen));
         let target = expr!(Call(Ident("my_func"), []));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_complex_funcall() {
+    fn complex_funcall() {
         let mut parser = Parser::new(tokens!(
             Ident("my_func".to_string()),
             OpenParen,
@@ -427,28 +427,28 @@ mod tests {
     }
 
     #[test]
-    fn test_unary_minus() {
+    fn unary_minus() {
         let mut parser = Parser::new(tokens!(Minus, NumLit(6.0)));
         let target = expr!(Unary(Negate, NumLit(6.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_unary_bitnot() {
+    fn unary_bitnot() {
         let mut parser = Parser::new(tokens!(Tilde, NumLit(6.0)));
         let target = expr!(Unary(BitNot, NumLit(6.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_unary_and_minus() {
+    fn unary_and_minus() {
         let mut parser = Parser::new(tokens!(Minus, NumLit(6.0), Minus, NumLit(6.0)));
         let target = expr!(Binary(Unary(Negate, NumLit(6.0)), Subtract, NumLit(6.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    fn test_unary_with_parens() {
+    fn unary_with_parens() {
         let mut parser = Parser::new(tokens!(
             Minus,
             OpenParen,
@@ -462,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn test_block() {
+    fn block() {
         // empty
         let mut parser = Parser::new(tokens!(OpenBracket, CloseBracket, Semi));
         let target = Expr::Block(vec![]);
@@ -515,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if() {
+    fn if_expr() {
         // if
         let mut parser = Parser::new(tokens!(
             If,
@@ -588,60 +588,38 @@ mod tests {
 
         assert_eq!(parser.parse_expr(), target);
     }
-    pub fn test_comparisons() {
-        let comparison_operations = [
-            (Token::EqEq, BinaryOp::Equal),
-            (Token::BangEq, BinaryOp::NotEqual),
-            (Token::Greater, BinaryOp::GreaterThan),
-            (Token::Less, BinaryOp::LessThan),
-            (Token::GreaterEq, BinaryOp::GreaterEq),
-            (Token::LessEq, BinaryOp::LessEq),
-        ];
 
-        for tok_and_expected in comparison_operations {
-            let mut parser = Parser::new(
-                [Token::NumLit(3.0), tok_and_expected.0, Token::NumLit(4.0)].into_iter(),
-            );
+    #[test]
+    fn comparisons() {
+        let mut parser = Parser::new(tokens!(NumLit(3.0), EqEq, NumLit(4.0)));
+        let target = expr!(Binary(NumLit(3.0), Equal, NumLit(4.0)));
+        assert_eq!(parser.parse_expr(), target);
 
-            let target = Expr::Binary {
-                left: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
-                operation: tok_and_expected.1,
-                right: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
-            };
+        let mut parser = Parser::new(tokens!(NumLit(3.0), Greater, NumLit(4.0)));
+        let target = expr!(Binary(NumLit(3.0), GreaterThan, NumLit(4.0)));
+        assert_eq!(parser.parse_expr(), target);
 
-            assert_eq!(parser.parse_expr(), target);
-        }
+        let mut parser = Parser::new(tokens!(NumLit(3.0), LessEq, NumLit(4.0)));
+        let target = expr!(Binary(NumLit(3.0), LessEq, NumLit(4.0)));
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]
-    pub fn test_comparison_order() {
-        let mut parser = Parser::new(
-            [
-                Token::NumLit(3.0),
-                Token::Plus,
-                Token::NumLit(3.0),
-                Token::EqEq,
-                Token::NumLit(9.0),
-                Token::Minus,
-                Token::NumLit(3.0),
-            ]
-            .into_iter(),
-        );
-
-        let target = Expr::Binary {
-            left: Box::new(Expr::Binary {
-                left: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
-                operation: BinaryOp::Add,
-                right: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
-            }),
-            operation: BinaryOp::Equal,
-            right: Box::new(Expr::Binary {
-                left: Box::new(Expr::Literal(RuntimeVal::Number(9.0))),
-                operation: BinaryOp::Subtract,
-                right: Box::new(Expr::Literal(RuntimeVal::Number(3.0))),
-            }),
-        };
-
+    fn comparison_order() {
+        let mut parser = Parser::new(tokens!(
+            NumLit(3.0),
+            Plus,
+            NumLit(3.0),
+            EqEq,
+            NumLit(9.0),
+            Minus,
+            NumLit(3.0)
+        ));
+        let target = expr!(Binary(
+            Binary(NumLit(3.0), Add, NumLit(3.0)),
+            Equal,
+            Binary(NumLit(9.0), Subtract, NumLit(3.0))
+        ));
         assert_eq!(parser.parse_expr(), target);
     }
 }

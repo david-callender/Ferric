@@ -1,0 +1,10 @@
+[package]
+name = "executable"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ferric = { version = "0.1.0", path = "../ferric" }
+
+[lints]
+workspace = true

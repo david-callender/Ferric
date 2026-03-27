@@ -3,5 +3,12 @@
 version = 4
 
 [[package]]
+name = "executable"
+version = "0.1.0"
+dependencies = [
+ "ferric",
+]
+
+[[package]]
 name = "ferric"
 version = "0.1.0"

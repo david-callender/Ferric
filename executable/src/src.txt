@@ -1,4 +1,4 @@
-if 1 == 1 {
+if 1 == 0 {
     print("one");
     "one";
 } otherwise if 2 == 2 {

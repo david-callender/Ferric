@@ -104,12 +104,24 @@ fn parse_number(digits: Vec<u8>) -> f64 {
 
 pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
+    keywords: HashMap<&'static str, Token>,
 }
 
 impl<I: Iterator<Item = u8>> Lexer<I> {
     pub fn new(stream: I) -> Self {
+        let keywords = HashMap::from([
+            ("let", Token::Let),
+            ("let", Token::Let),
+            ("if", Token::If),
+            ("otherwise", Token::Otherwise),
+            ("while", Token::While),
+            ("fn", Token::Fn),
+            ("and", Token::LAnd),
+            ("or", Token::LOr),
+        ]);
         Self {
             stream: stream.peekable(),
+            keywords,
         }
     }
 
@@ -155,16 +167,6 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
     }
 
     fn lex_ident(&mut self, first: u8) -> Token {
-        let keywords = HashMap::from([
-            ("let", Token::Let),
-            ("let", Token::Let),
-            ("if", Token::If),
-            ("otherwise", Token::Otherwise),
-            ("while", Token::While),
-            ("fn", Token::Fn),
-            ("and", Token::LAnd),
-            ("or", Token::LOr),
-        ]);
         let mut ident_bytes = vec![first];
         while let Some(b) = self.stream.peek()
             && (b.is_ascii_alphanumeric() || *b == b'_')
@@ -174,7 +176,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         }
         let ident = String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
 
-        if let Some(keyword) = keywords.get(ident.as_str()) {
+        if let Some(keyword) = self.keywords.get(ident.as_str()) {
             keyword.clone()
         } else {
             Token::Ident(ident)

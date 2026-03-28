@@ -69,10 +69,6 @@ impl std::fmt::Display for Token {
     }
 }
 
-pub struct Lexer<I: Iterator<Item = u8>> {
-    stream: Peekable<I>,
-}
-
 fn parse_number(digits: Vec<u8>) -> f64 {
     let mut num = 0.0;
     let mut i: i32 = -1;
@@ -104,6 +100,10 @@ fn parse_number(digits: Vec<u8>) -> f64 {
         "No numbers detected after decimal"
     );
     num
+}
+
+pub struct Lexer<I: Iterator<Item = u8>> {
+    stream: Peekable<I>,
 }
 
 impl<I: Iterator<Item = u8>> Lexer<I> {

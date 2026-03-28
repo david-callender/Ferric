@@ -4,7 +4,6 @@ use std::{collections::HashMap, iter::Peekable, vec};
 pub enum Token {
     Let,          // let
     If,           // if
-    Elseif,       // elseif
     Otherwise,    // otherwise
     While,        // while
     Fn,           // fn
@@ -39,7 +38,6 @@ impl std::fmt::Display for Token {
         match self {
             Token::Let => write!(f, "let"),
             Token::If => write!(f, "if"),
-            Token::Elseif => write!(f, "elseif"),
             Token::Otherwise => write!(f, "otherwise"),
             Token::While => write!(f, "while"),
             Token::Fn => write!(f, "fn"),
@@ -161,7 +159,6 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             ("let", Token::Let),
             ("let", Token::Let),
             ("if", Token::If),
-            ("elseif", Token::Elseif),
             ("otherwise", Token::Otherwise),
             ("while", Token::While),
             ("fn", Token::Fn),

@@ -1,27 +1,11 @@
-use std::io::stdout;
-
-use crate::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
-
-mod interpreter;
-mod lexer;
+pub mod interpreter;
+pub mod lexer;
 mod macros;
-mod parser;
-
-pub fn ferric_main(source: &str) {
-    let lexer = Lexer::new(source.bytes());
-
-    let mut parser = Parser::new(lexer);
-    let (expr, var_storage_size) = parser.parse();
-
-    let mut output = stdout();
-
-    let mut interpreter = Interpreter::new(&mut output, var_storage_size);
-    interpreter.interpret(&expr);
-}
+pub mod parser;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 
     fn harness(src: &str) -> String {
         let (expr, var_storage_size) = Parser::new(Lexer::new(src.bytes())).parse();

@@ -221,6 +221,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 RuntimeVal::Null
             }
             Expr::VarGet { slot } => self.var_storage[*slot].clone(),
+            Expr::VarSet { slot, value } => todo!(),
             Expr::If {
                 cond,
                 then,
@@ -250,6 +251,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 }
                 last_val
             }
+            Expr::While { cond, body } => todo!(),
         }
     }
 

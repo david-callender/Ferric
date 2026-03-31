@@ -75,9 +75,9 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn unary_negate(&self, right: RuntimeVal) -> RuntimeVal {
+    fn unary_num_negate(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
-            RuntimeVal::Boolean(b) => RuntimeVal::Boolean(!b),
+            RuntimeVal::Number(n) => RuntimeVal::Number(-n),
             _ => panic!("You can't not not negate that!"), // TODO : Update error messages
         }
     }
@@ -197,7 +197,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             Expr::Unary { operation, right } => {
                 let right_val = self.evaluate(right);
                 match operation {
-                    UnaryOp::Negate => self.unary_negate(right_val),
+                    UnaryOp::Negate => self.unary_num_negate(right_val),
                     UnaryOp::BitNot => self.unary_bit_not(right_val),
                 }
             }
@@ -221,7 +221,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 RuntimeVal::Null
             }
             Expr::VarGet { slot } => self.var_storage[*slot].clone(),
-            Expr::VarSet { slot, value } => todo!(),
+            Expr::VarSet { slot, value } => {
+                self.var_storage[*slot] = self.evaluate(value);
+                RuntimeVal::Null
+            },
             Expr::If {
                 cond,
                 then,
@@ -372,8 +375,9 @@ mod tests {
         assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(3.0));
     }
 
+    /*
     #[test]
-    fn unary_bool() {
+    fn unary_num_() {
         let mut out = sink();
         let mut interpreter = Interpreter::new(&mut out, 0);
 
@@ -382,5 +386,22 @@ mod tests {
 
         let expr = expr!(Unary(Negate, BoolLit(false)));
         assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Boolean(true));
+    }
+    */
+
+    #[test]
+    fn test_var_set() {
+        let mut out = sink();
+        let mut interpreter = Interpreter::new(&mut out, 1);
+        
+        let expr = vec![
+            Expr::Decl { value: Box::new(Expr::Literal(RuntimeVal::Number(4.0))), slot: 0 }, // declare variable
+            Expr::VarSet { slot: 0, value: Box::new(Expr::Literal(RuntimeVal::Number(5.0))) }, // update variable
+        ];
+ 
+        interpreter.interpret(&expr);
+        
+        assert_eq!(interpreter.var_storage[0],RuntimeVal::Number(5.0));
+
     }
 }

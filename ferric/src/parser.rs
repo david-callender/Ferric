@@ -39,7 +39,7 @@ pub enum Expr {
     While {
         cond: Box<Expr>,
         body: Box<Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,8 +130,8 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         } else if self.matches(Token::OpenBracket) {
             self.parse_block()
         } else if self.matches(Token::While) {
-	    self.parse_while()
-	} else {
+            self.parse_while()
+        } else {
             self.parse_comparisons()
         }
     }
@@ -180,15 +180,12 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_while(&mut self) -> Expr {
-	let cond = Box::new(self.parse_expr());
-	self.consume(Token::OpenBracket, "Expected '{' after while");
-	let body = Box::new(self.parse_block());
-	Expr::While {
-	    cond,
-	    body,
-	}
+        let cond = Box::new(self.parse_expr());
+        self.consume(Token::OpenBracket, "Expected '{' after while");
+        let body = Box::new(self.parse_block());
+        Expr::While { cond, body }
     }
-    
+
     // assumes the leading Token::OpenBracket has already been consumed.
     fn parse_block(&mut self) -> Expr {
         if self.matches(Token::CloseBracket) {
@@ -645,23 +642,22 @@ mod tests {
 
     #[test]
     fn while_expr() {
-	let mut parser = Parser::new(tokens!(
-	    While,
-	    NumLit(1.0),
-	    Greater,
-	    NumLit(5.0),
-	    OpenBracket,
-	    NumLit(6.9),
-	    CloseBracket,
-	));
-	let target = expr!(While {
-	    Binary (NumLit(1.0), GreaterThan, NumLit(5.0)),
-	    Block {
-		NumLit(6.9),
-	    }
-	});
+        let mut parser = Parser::new(tokens!(
+            While,
+            NumLit(1.0),
+            Greater,
+            NumLit(5.0),
+            OpenBracket,
+            NumLit(6.9),
+            CloseBracket,
+        ));
+        let target = expr!(While {
+            Binary (NumLit(1.0), GreaterThan, NumLit(5.0)),
+            Block {
+            NumLit(6.9),
+            }
+        });
 
-	assert_eq!(parser.parse_expr(), target);
-	}
-	    
+        assert_eq!(parser.parse_expr(), target);
+    }
 }

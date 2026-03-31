@@ -25,4 +25,35 @@ mod tests {
         assert_eq!(harness("print(7 + 4 * 5);"), "27\n");
         assert_eq!(harness("print((7 + 4) * 5);"), "55\n");
     }
+
+    #[test]
+    fn arithmetic() {
+         assert_eq!(harness("print(4 - 5);"), "-1\n");
+         //assert_eq!(harness("print(-4);"), "-4\n");
+         assert_eq!(harness("print(25 - 5 * 5);"), "0\n");
+         assert_eq!(harness("print(50 / 2 - 5 * 5);"), "0\n");
+         assert_eq!(harness("print(100 / (2 * 2) - 5 * 5);"), "0\n");
+    }
+
+    #[test]
+    fn blocks() {
+        assert_eq!(harness("{             };"), "");
+        assert_eq!(harness("{print(4)};"), "4\n");
+        assert_eq!(harness("{print(4)};"), "4\n");
+    }
+
+    #[test]
+    fn compare() {
+        assert_eq!(harness(""), "");
+    }
+
+    #[test]
+    fn vars() {
+        assert_eq!(harness("let a = 0; print(a); let b = 1; print(b); let c = 2; print(c); let d = 3; print(d);"), "0\n1\n2\n3\n");
+        assert_eq!(harness("let x = 0; print(x); let x = 2; print(x);"), "0\n2\n");
+        assert_eq!(harness("let x = 0; print(x); if x == 0 {let x = 2; print(x)}; print(x);"), "0\n2\n0\n");
+        assert_eq!(harness("let x = 0; print(x); let x = 2; print(x);"), "0\n2\n");
+    }
 }
+
+

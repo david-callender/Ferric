@@ -39,7 +39,7 @@ pub enum Expr {
     While {
         cond: Box<Expr>,
         body: Box<Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

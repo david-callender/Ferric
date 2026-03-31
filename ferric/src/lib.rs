@@ -25,4 +25,12 @@ mod tests {
         assert_eq!(harness("print(7 + 4 * 5);"), "27\n");
         assert_eq!(harness("print((7 + 4) * 5);"), "55\n");
     }
+
+    #[test]
+    fn boolean() {
+        assert_eq!(harness("print(true);"), "true\n");
+        assert_eq!(harness("print(false);"), "false\n");
+        assert_eq!(harness("if true  {print(1);} otherwise{print(0);};"), "1\n");
+        assert_eq!(harness("if false {print(1);} otherwise{print(0);};"), "0\n");
+    }
 }

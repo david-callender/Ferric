@@ -1,7 +1,2 @@
-if 1 == 0 {
-    print("one");
-    "one";
-} otherwise if 2 == 2 {
-    print("two");
-    "two";
-};
+let a = 4;
+a = 10;

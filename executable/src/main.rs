@@ -1,4 +1,5 @@
 use std::io::stdout;
+use std::fs;
 
 use ferric::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 
@@ -15,6 +16,6 @@ fn ferric_main(source: &str) {
 }
 
 fn main() {
-    let source = include_str!("src.txt");
-    ferric_main(source);
+    let contents = fs::read_to_string("./executable/src.fe").expect("No such file located.");
+    ferric_main(&contents);
 }

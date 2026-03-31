@@ -39,7 +39,7 @@ pub enum Expr {
     While {
         cond: Box<Expr>,
         body: Box<Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,8 +129,10 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             self.parse_if()
         } else if self.matches(Token::OpenBracket) {
             self.parse_block()
+        } else if self.matches(Token::While) {
+            self.parse_while()
         } else {
-            self.parse_comparisons()
+            self.parse_var_set()
         }
     }
 
@@ -177,6 +179,13 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         }
     }
 
+    fn parse_while(&mut self) -> Expr {
+        let cond = Box::new(self.parse_expr());
+        self.consume(Token::OpenBracket, "Expected '{' after while");
+        let body = Box::new(self.parse_block());
+        Expr::While { cond, body }
+    }
+
     // assumes the leading Token::OpenBracket has already been consumed.
     fn parse_block(&mut self) -> Expr {
         if self.matches(Token::CloseBracket) {
@@ -202,6 +211,24 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         );
         self.env.pop().expect("misaligned environment stack");
         Expr::Block(exprs)
+    }
+
+    fn parse_var_set(&mut self) -> Expr {
+        let left = self.parse_comparisons();
+
+        if self.matches(Token::Eq) {
+            let right = self.parse_comparisons();
+
+            let Expr::VarGet { slot } = left else {
+                panic!("Expected variable name to be an identifier");
+            };
+
+            return Expr::VarSet {
+                slot,
+                value: Box::new(right),
+            };
+        }
+        left
     }
 
     fn parse_comparisons(&mut self) -> Expr {
@@ -338,6 +365,8 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Token::OpenParen => self.parse_paren(),
             Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
+            Token::True => Expr::Literal(RuntimeVal::Boolean(true)),
+            Token::False => Expr::Literal(RuntimeVal::Boolean(false)),
             Token::Ident(identifier) => self
                 .find_var(&identifier)
                 .map(|slot| Expr::VarGet { slot })
@@ -628,6 +657,27 @@ mod tests {
             Equal,
             Binary(NumLit(9.0), Subtract, NumLit(3.0))
         ));
+        assert_eq!(parser.parse_expr(), target);
+    }
+
+    #[test]
+    fn while_expr() {
+        let mut parser = Parser::new(tokens!(
+            While,
+            NumLit(1.0),
+            Greater,
+            NumLit(5.0),
+            OpenBracket,
+            NumLit(6.9),
+            CloseBracket,
+        ));
+        let target = expr!(While {
+            Binary (NumLit(1.0), GreaterThan, NumLit(5.0)),
+            Block {
+            NumLit(6.9),
+            }
+        });
+
         assert_eq!(parser.parse_expr(), target);
     }
 }

@@ -84,10 +84,10 @@ macro_rules! expr {
     (If{$cn:ident$($c:tt)?, $tn:ident$($t:tt)?, $on:ident$($o:tt)?}) => {
         Expr::If {
             cond: Box::new(expr!($cn$($c)?)),
-    	    then: Box::new(expr!($tn$($t)?)),
+            then: Box::new(expr!($tn$($t)?)),
             otherwise: Some(Box::new(expr!($on$($o)?))),
         }
-	};
+    };
     (While{$cn:ident$c:tt, $bn:ident$b:tt}) => {
         Expr::While {
             cond: Box::new(expr!($cn$c)),

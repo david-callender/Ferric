@@ -54,7 +54,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
                 assert!(n.fract() != 0.0, "You can't multiply a string by a float!");
 
-                let st = format!("{s1}").repeat(n as usize);
+                let st  = s1.repeat(n as usize);
 
                 RuntimeVal::String(st.into())
             }

@@ -256,7 +256,7 @@ mod tests {
         let mut parser = Parser::new([Token::StringLit("dingus".to_string())].into_iter());
         assert_eq!(
             parser.parse_expr(),
-            Expr::Literal(RuntimeVal::String("dingus".to_string().into()))
+            Expr::Literal(RuntimeVal::String("dingus".into()))
         );
     }
 
@@ -359,7 +359,7 @@ mod tests {
                     Expr::Literal(RuntimeVal::Number(88.0)),
                 ],
             }),
-            args: vec![Expr::Literal(RuntimeVal::String("dingus".to_string().into()))],
+            args: vec![Expr::Literal(RuntimeVal::String("dingus".into()))],
         };
 
         assert_eq!(parser.parse_expr(), target);

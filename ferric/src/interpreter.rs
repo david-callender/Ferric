@@ -253,8 +253,25 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     last_val = self.evaluate(exp);
                 }
                 last_val
-            },
-            Expr::While { cond, body } => todo!(),
+            }
+            Expr::While { cond, body } => {
+                let RuntimeVal::Boolean(mut while_cond) = self.evaluate(cond) else {
+                    panic!("While condition not boolean expression!");
+                };
+
+                while while_cond {
+                    self.evaluate(body);
+
+                    while_cond = match self.evaluate(cond) {
+                        RuntimeVal::Boolean(b) => b,
+                        _ => {
+                            panic!("While condition not boolean expression!")
+                        }
+                    };
+                }
+
+                RuntimeVal::Null // temp, TODO: handle .collect()
+            }
         }
     }
 

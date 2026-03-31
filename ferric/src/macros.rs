@@ -88,4 +88,10 @@ macro_rules! expr {
             otherwise: Some(Box::new(expr!($on$($o)?))),
         }
     };
+    (While{$cn:ident$c:tt, $bn:ident$b:tt}) => {
+        Expr::While {
+            cond: Box::new(expr!($cn$c)),
+            body: Box::new(expr!($bn$b)),
+        }
+    };
 }

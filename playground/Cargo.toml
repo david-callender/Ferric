@@ -1,0 +1,16 @@
+[package]
+authors = ["The wasm-bindgen Developers"]
+edition = "2021"
+name = "hello_world"
+publish = false
+version = "0.0.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ferric = { version = "0.1.0", path = "../ferric" }
+wasm-bindgen = "0.2.114"
+
+[lints]
+workspace = true

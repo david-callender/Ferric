@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["executable", "ferric"]
+members = ["executable", "ferric", "playground"]
 default-members = ["executable", "ferric"]
 
 [profile.release]

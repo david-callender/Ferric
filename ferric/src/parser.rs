@@ -39,7 +39,7 @@ pub enum Expr {
     While {
         cond: Box<Expr>,
         body: Box<Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,7 +130,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         } else if self.matches(Token::OpenBracket) {
             self.parse_block()
         } else {
-            self.parse_comparisons()
+            self.parse_var_set()
         }
     }
 
@@ -202,6 +202,24 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         );
         self.env.pop().expect("misaligned environment stack");
         Expr::Block(exprs)
+    }
+
+    fn parse_var_set(&mut self) -> Expr {
+        let left = self.parse_comparisons();
+
+        if self.matches(Token::Eq) {
+            let right = self.parse_comparisons();
+
+            let Expr::VarGet { slot } = left else {
+                panic!("Expected variable name to be an identifier");
+            };
+
+            return Expr::VarSet {
+                slot,
+                value: Box::new(right),
+            };
+        }
+        left
     }
 
     fn parse_comparisons(&mut self) -> Expr {

@@ -130,7 +130,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         } else if self.matches(Token::OpenBracket) {
             self.parse_block()
         } else {
-            self.parse_var_get()
+            self.parse_var_set()
         }
     }
 
@@ -204,7 +204,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         Expr::Block(exprs)
     }
 
-    fn parse_var_get(&mut self) -> Expr {
+    fn parse_var_set(&mut self) -> Expr {
         let left = self.parse_comparisons();
 
         if self.matches(Token::Eq) {

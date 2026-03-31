@@ -28,6 +28,8 @@ pub enum Token {
     LAnd,         // and
     LOr,          // or
     Bang,         // !
+    True,         //true
+    False,        //false
     StringLit(String),
     NumLit(f64),
     Ident(String),
@@ -62,6 +64,8 @@ impl std::fmt::Display for Token {
             Token::LAnd => write!(f, "and"),
             Token::LOr => write!(f, "or"),
             Token::Bang => write!(f, "!"),
+            Token::True => write!(f, "true"),
+            Token::False => write!(f, "false"),
             Token::StringLit(n) => write!(f, "{n}"),
             Token::NumLit(n) => write!(f, r#""{n}""#),
             Token::Ident(n) => write!(f, "ident[{n}]"),
@@ -118,6 +122,8 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             ("fn", Token::Fn),
             ("and", Token::LAnd),
             ("or", Token::LOr),
+            ("true", Token::True),
+            ("false", Token::False),
         ]);
         Self {
             stream: stream.peekable(),

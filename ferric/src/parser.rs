@@ -338,6 +338,8 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Token::OpenParen => self.parse_paren(),
             Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
+            Token::True => Expr::Literal(RuntimeVal::Boolean(true)),
+            Token::False => Expr::Literal(RuntimeVal::Boolean(false)),
             Token::Ident(identifier) => self
                 .find_var(&identifier)
                 .map(|slot| Expr::VarGet { slot })

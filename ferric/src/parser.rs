@@ -27,8 +27,8 @@ pub enum Expr {
         slot: usize,
     },
     VarSet {
-        slot: usize,
         value: Box<Expr>,
+        slot: usize,
     },
     Block(Vec<Expr>),
     If {
@@ -224,8 +224,8 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             };
 
             return Expr::VarSet {
-                slot,
                 value: Box::new(right),
+                slot,
             };
         }
         left
@@ -674,7 +674,7 @@ mod tests {
         let target = expr!(While {
             Binary (NumLit(1.0), GreaterThan, NumLit(5.0)),
             Block {
-            NumLit(6.9),
+                NumLit(6.9),
             }
         });
 

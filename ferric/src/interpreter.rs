@@ -208,7 +208,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 RuntimeVal::Null
             }
             Expr::VarGet { slot } => self.var_storage[*slot].clone(),
-            Expr::VarSet { slot, value } => {
+            Expr::VarSet { value, slot } => {
                 self.var_storage[*slot] = self.evaluate(value);
                 RuntimeVal::Null
             }
@@ -397,16 +397,7 @@ mod tests {
         let mut out = sink();
         let mut interpreter = Interpreter::new(&mut out, 1);
 
-        let expr = vec![
-            Expr::Decl {
-                value: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
-                slot: 0,
-            }, // declare variable
-            Expr::VarSet {
-                slot: 0,
-                value: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
-            }, // update variable
-        ];
+        let expr = vec![expr!(Decl(NumLit(4.0), 0)), expr!(VarSet(NumLit(5.0), 0))];
 
         interpreter.interpret(&expr);
 

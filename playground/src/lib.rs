@@ -4,6 +4,11 @@ use ferric::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlPreElement;
 
+// #[wasm_bindgen]
+// extern "C" {
+//     fn alert(s: &str);
+// }
+
 struct JsWriter {
     output: HtmlPreElement,
 }
@@ -26,12 +31,15 @@ impl Write for JsWriter {
 }
 
 #[wasm_bindgen]
-pub fn ferric(src: &str, output: HtmlPreElement) {
-    let panic_output = output.clone();
-
+pub fn init(output: HtmlPreElement) {
     std::panic::set_hook(Box::new(move |info| {
-        panic_output.set_text_content(Some(&format!("panic: {info}")));
+        output.set_text_content(Some(&format!("panic: {info}")));
     }));
+}
+
+#[wasm_bindgen]
+pub fn ferric(src: &str, output: HtmlPreElement) {
+    output.set_text_content(Some(""));
 
     let mut output = JsWriter { output };
 

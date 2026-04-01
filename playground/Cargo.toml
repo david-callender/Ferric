@@ -13,5 +13,11 @@ ferric = { version = "0.1.0", path = "../ferric" }
 wasm-bindgen = "0.2.114"
 web-sys = { version = "0.3.94", features = ['Document', 'Element', 'HtmlElement', 'Node', 'Window', 'HtmlPreElement'] }
 
+# [package.metadata.wasm-pack.profile.release]
+# wasm-opt = ['-O', '--enable-bulk-memory']
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [lints]
 workspace = true

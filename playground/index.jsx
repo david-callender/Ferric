@@ -1,9 +1,10 @@
-import { ferric } from "./pkg";
+import { ferric, init } from "./pkg";
 import React, { useState } from "react";
 import { useRef } from "react";
 import { createRoot } from "react-dom/client";
 
 import Editor from "@monaco-editor/react";
+import { useEffect } from "react";
 
 //@ts-check
 
@@ -12,6 +13,13 @@ const INITIAL_TEXT = `print("Hello, World!");`;
 const Component = () => {
   const [text, setText] = useState(INITIAL_TEXT);
   const output = useRef(null);
+
+  useEffect(() => {
+    console.log(output.current);
+    if (output != null) {
+      init(output.current);
+    }
+  }, [output]);
 
   return (
     <div className="px-6 py-4 min-h-screen bg-slate-800">
@@ -37,7 +45,10 @@ const Component = () => {
             }}
           />
         </div>
-        <pre className="border bg-slate-700 p-2 text-white border-black h-[90vh] overflow-auto" ref={output}></pre>
+        <pre
+          className="border bg-slate-700 p-2 text-white border-black h-[90vh] overflow-auto"
+          ref={output}
+        ></pre>
       </div>
     </div>
   );

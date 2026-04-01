@@ -9,6 +9,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "index.js",
+    clean: true,
   },
   module: {
     rules: [
@@ -33,7 +34,7 @@ module.exports = {
       crateDirectory: __dirname,
     }),
   ],
-  mode: "development",
+  mode: "production",
   experiments: {
     asyncWebAssembly: true,
   },

@@ -27,10 +27,16 @@ impl Write for JsWriter {
 
 #[wasm_bindgen]
 pub fn ferric(src: &str, output: HtmlPreElement) {
-    output.set_text_content(Some(""));
+    let panic_output = output.clone();
+
+    std::panic::set_hook(Box::new(move |info| {
+        panic_output.set_text_content(Some(&format!("panic: {info}")));
+    }));
+
+    let mut output = JsWriter { output };
+
     let lexer = Lexer::new(src.bytes());
     let (program, var_storage_size) = Parser::new(lexer).parse();
-    let mut output = JsWriter { output };
     let mut interpreter = Interpreter::new(&mut output, var_storage_size);
     interpreter.interpret(&program);
 }

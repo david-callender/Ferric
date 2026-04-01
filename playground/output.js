@@ -1,5 +1,4 @@
-const output = document.getElementById("output");
-
 export function addToOutput(contents) {
-    output.textContent += contents;
+  const output = document.getElementById("output");
+  output.textContent += contents;
 }

@@ -6,8 +6,10 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 extern "C" {
     fn alert(s: &str);
-    
-    #[wasm_bindgen(js_namespace = output)]
+}
+
+#[wasm_bindgen(module = "/output.js")]
+extern "C" {
     fn addToOutput(contents: &str);
 }
 

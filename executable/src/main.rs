@@ -1,5 +1,5 @@
-use std::io::stdout;
 use std::fs;
+use std::io::stdout;
 
 use ferric::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 

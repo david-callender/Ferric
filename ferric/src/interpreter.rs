@@ -139,23 +139,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
     fn call_function(&mut self, func_name: RuntimeVal, args: Vec<RuntimeVal>) -> RuntimeVal {
         match func_name {
-            RuntimeVal::Function(fn_name) => {
-                match fn_name.as_str() {
-                    "print" => {
-                        // TODO: How to do format strings here, at some point
-
-                        if args.is_empty() {
-                            writeln!(self.output).expect("Failed to write to output");
-                        } else {
-                            for val in args {
-                                writeln!(self.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
-                            }
-                        }
-                        RuntimeVal::Null
-                    }
-                    _ => panic!(""),
-                }
-            }
+            RuntimeVal::Function(fn_name) => match fn_name.as_str() {
+                "print" => builtin_print(self, args),
+                _ => panic!(""),
+            },
             _ => panic!("Invalid function call"),
         }
     }
@@ -224,7 +211,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             Expr::VarSet { slot, value } => {
                 self.var_storage[*slot] = self.evaluate(value);
                 RuntimeVal::Null
-            },
+            }
             Expr::If {
                 cond,
                 then,
@@ -280,6 +267,22 @@ impl<'a, W: Write> Interpreter<'a, W> {
             self.evaluate(exp);
         }
     }
+}
+
+// BUILT-IN FUNCTIONS
+// All of these must have type `fn(&mut Interpreter<'a, W>, Vec<RuntimeVal>) -> RuntimeVal`
+
+fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+    // TODO: How to do format strings here, at some point
+
+    if args.is_empty() {
+        writeln!(i.output).expect("Failed to write to output");
+    } else {
+        for val in args {
+            writeln!(i.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
+        }
+    }
+    RuntimeVal::Null
 }
 
 #[cfg(test)]
@@ -393,15 +396,20 @@ mod tests {
     fn test_var_set() {
         let mut out = sink();
         let mut interpreter = Interpreter::new(&mut out, 1);
-        
-        let expr = vec![
-            Expr::Decl { value: Box::new(Expr::Literal(RuntimeVal::Number(4.0))), slot: 0 }, // declare variable
-            Expr::VarSet { slot: 0, value: Box::new(Expr::Literal(RuntimeVal::Number(5.0))) }, // update variable
-        ];
- 
-        interpreter.interpret(&expr);
-        
-        assert_eq!(interpreter.var_storage[0],RuntimeVal::Number(5.0));
 
+        let expr = vec![
+            Expr::Decl {
+                value: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
+                slot: 0,
+            }, // declare variable
+            Expr::VarSet {
+                slot: 0,
+                value: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
+            }, // update variable
+        ];
+
+        interpreter.interpret(&expr);
+
+        assert_eq!(interpreter.var_storage[0], RuntimeVal::Number(5.0));
     }
 }

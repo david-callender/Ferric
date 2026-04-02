@@ -1,7 +1,8 @@
 {
   "scripts": {
     "build": "webpack",
-    "serve": "webpack serve"
+    "serve": "webpack serve",
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
@@ -15,6 +16,8 @@
     "html-webpack-plugin": "5.6.0",
     "postcss": "^8.5.8",
     "postcss-loader": "^8.2.1",
+    "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.7.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "style-loader": "^4.0.0",

@@ -24,9 +24,9 @@ const Main = () => {
   }, [output]);
 
   return (
-    <div className="px-6 py-4 min-h-screen bg-slate-800">
+    <div className="min-h-screen bg-slate-800 px-6 py-4">
       <button
-        className="bg-slate-300 border rounded px-2 py-1 m-4"
+        className="m-4 rounded border bg-slate-300 px-2 py-1"
         onClick={() => ferric(text, output.current)}
       >
         Run
@@ -47,9 +47,9 @@ const Main = () => {
             }}
           />
         </div>
-        <div className="h-[90vh] flex flex-col gap-4">
+        <div className="flex h-[90vh] flex-col gap-4">
           <pre
-            className="border bg-slate-700 p-2 text-white border-black grow overflow-auto"
+            className="grow overflow-auto border border-black bg-slate-700 p-2 text-white"
             ref={output}
           ></pre>
           {/*<div className="border bg-slate-700 p-2 text-white border-black grow overflow-auto">

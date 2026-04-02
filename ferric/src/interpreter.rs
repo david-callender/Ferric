@@ -1,7 +1,8 @@
-use std::{fmt::Display, io::Write, time::Duration};
+use std::{fmt::Display, io::Write};
 
 use crate::parser::{BinaryOp, Expr, UnaryOp};
-use std::time::{SystemTime};
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
@@ -27,7 +28,7 @@ impl Display for RuntimeVal {
 pub struct Interpreter<'a, W: Write> {
     output: &'a mut W,
     var_storage: Vec<RuntimeVal>,
-    start_time: SystemTime
+    start_time: SystemTime,
 }
 
 impl<'a, W: Write> Interpreter<'a, W> {
@@ -35,7 +36,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         Self {
             output,
             var_storage: vec![RuntimeVal::Null; var_storage_size],
-            start_time: SystemTime::now()
+            start_time: SystemTime::now(),
         }
     }
 
@@ -146,6 +147,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 "print" => builtin_print(self, args),
                 "clock" => builtin_clock(self, args),
                 "unix_time" => builtin_unix_time(self, args),
+                "sleep" => builtin_sleep(self, args),
                 _ => panic!(""),
             },
             _ => panic!("Invalid function call"),
@@ -290,25 +292,45 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     RuntimeVal::Null
 }
 
-
 fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
-    assert!(args.is_empty(), "Expected 0 args, got {}", args.len());
+    assert!(
+        args.is_empty(),
+        "clock(): expected 0 args, got {}",
+        args.len()
+    );
 
     match SystemTime::now().duration_since(i.start_time) {
         Ok(duration) => RuntimeVal::Number(duration.as_secs_f64()), // for now just returns the number of nano seconds
-        Err(e) => panic!("{e}")
+        Err(e) => panic!("{e}"),
     }
 }
 
 fn builtin_unix_time<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
-    assert!(args.is_empty(), "Expected 0 args, got {}", args.len());
+    assert!(
+        args.is_empty(),
+        "unix_time: expected 0 args, got {}",
+        args.len()
+    );
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(d) => RuntimeVal::Number(d.as_secs_f64()),
-        Err(e) => panic!("{e}")
+        Err(e) => panic!("{e}"),
     }
 }
 
-
+fn builtin_sleep<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+    assert!(
+        args.len() == 1,
+        "sleep(): expected 1 args, got {}",
+        args.len()
+    );
+    match args[0] {
+        RuntimeVal::Number(n) => {
+            thread::sleep(Duration::from_secs_f64(n));
+            RuntimeVal::Null
+        }
+        _ => panic!("Wrong arg type"),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -427,5 +449,41 @@ mod tests {
         interpreter.interpret(&expr);
 
         assert_eq!(interpreter.var_storage[0], RuntimeVal::Number(5.0));
+    }
+
+    #[test]
+    fn clock() {
+        let mut out = sink();
+
+        let test = vec![expr!(Call(Ident("sleep"), [NumLit(1.0)])), expr!(Decl(Call(Ident("clock"), []), 0))];
+        let eps = 0.006; // margin of time for program to run
+
+        let mut interpreter = Interpreter::new(&mut out, 1);
+
+        interpreter.interpret(&test);
+        if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
+            assert!(eps > (c-1.0).abs(), "clock ran longer than expected! {}", c-1.0);
+        }
+    }
+
+    #[test]
+    fn unix() {
+        let mut out = sink();
+
+        let eps = 1.0;
+        let test = vec![expr!(Decl(Call(Ident("unix_time"), []), 0))];
+
+        let mut interpreter = Interpreter::new(&mut out, 1);
+
+        interpreter.interpret(&test);
+        if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
+            match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                Ok(actual) => {
+                    assert!(c - actual.as_secs_f64() < eps, "unix time not reported correctly");
+                }
+                Err(e) => panic!("{e}")
+            }
+            
+        }
     }
 }

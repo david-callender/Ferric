@@ -296,13 +296,15 @@ fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -
     if let RuntimeVal::String(string) = &args[0] {
         let start = expect_int(
             &args[1],
-            "substr(): Non-integer substring starting index: {}",
-            &args[1],
+            format!(
+                "substr(): Non-integer substring starting index: {}",
+                &args[1]
+            )
+            .as_str(),
         );
         let end = expect_int(
             &args[2],
-            "substr(): Non-integer substring ending index: {}",
-            &args[2],
+            format!("substr(): Non-integer substring ending index: {}", &args[2]).as_str(),
         );
 
         assert!(

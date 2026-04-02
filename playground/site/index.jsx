@@ -1,4 +1,4 @@
-import { ferric, init } from "./pkg";
+import { ferric, init } from "../pkg";
 import React, { useState } from "react";
 import { useRef } from "react";
 import { createRoot } from "react-dom/client";

@@ -8,17 +8,15 @@ import { useEffect } from "react";
 
 import "./style.css";
 
-//@ts-check
-
 const INITIAL_TEXT = `print("Hello, World!");`;
 
 const Main = () => {
   const [text, setText] = useState(INITIAL_TEXT);
-  const output = useRef(null);
-
+  const output = useRef<HTMLPreElement>(null);
+  
   useEffect(() => {
     console.log(output.current);
-    if (output != null) {
+    if (output.current != null) {
       init(output.current);
     }
   }, [output]);
@@ -27,7 +25,13 @@ const Main = () => {
     <div className="min-h-screen bg-slate-800 px-6 py-4">
       <button
         className="m-4 rounded border bg-slate-300 px-2 py-1"
-        onClick={() => ferric(text, output.current)}
+        onClick={() => {
+          if (output.current === null) {
+            alert("Couldn't find output");
+          } else {
+            ferric(text, output.current);
+          }
+        }}
       >
         Run
       </button>
@@ -38,7 +42,7 @@ const Main = () => {
             theme="vs-dark"
             height="90vh"
             onChange={(value, ev) => {
-              setText(value);
+              setText(value ?? "undefined");
             }}
             options={{
               minimap: {

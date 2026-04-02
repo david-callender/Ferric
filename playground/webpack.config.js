@@ -5,7 +5,7 @@ const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 
 /** @type {webpack.Configuration} */
 module.exports = {
-  entry: "./site/index.jsx",
+  entry: "./site/index.tsx",
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "index.js",
@@ -13,14 +13,21 @@ module.exports = {
   },
   module: {
     rules: [
+      
+            // {
+            //   test: /\.tsx?$/,
+            //   use: "ts-loader",
+            //   exclude: /node_modules/,
+            // },
+          
       {
-        test: /\.jsx$/,
+        test: /\.tsx$/,
         exclude: /node_modules/,
         use: {
           loader: "babel-loader",
           options: {
             targets: "defaults",
-            presets: ["@babel/preset-env", "@babel/preset-react"],
+            presets: ["@babel/preset-env", "@babel/preset-react", "@babel/preset-typescript"],
           },
         },
       },

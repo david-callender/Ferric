@@ -1,6 +1,7 @@
-use std::{fmt::Display, io::Write};
+use std::{fmt::Display, io::Write, time::Duration};
 
 use crate::parser::{BinaryOp, Expr, UnaryOp};
+use std::time::{SystemTime};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
@@ -26,6 +27,7 @@ impl Display for RuntimeVal {
 pub struct Interpreter<'a, W: Write> {
     output: &'a mut W,
     var_storage: Vec<RuntimeVal>,
+    start_time: SystemTime
 }
 
 impl<'a, W: Write> Interpreter<'a, W> {
@@ -33,6 +35,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         Self {
             output,
             var_storage: vec![RuntimeVal::Null; var_storage_size],
+            start_time: SystemTime::now()
         }
     }
 
@@ -141,6 +144,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
         match func_name {
             RuntimeVal::Function(fn_name) => match fn_name.as_str() {
                 "print" => builtin_print(self, args),
+                "clock" => builtin_clock(self, args),
+                "unix_time" => builtin_unix_time(self, args),
                 _ => panic!(""),
             },
             _ => panic!("Invalid function call"),
@@ -284,6 +289,26 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     }
     RuntimeVal::Null
 }
+
+
+fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+    assert!(args.is_empty(), "Expected 0 args, got {}", args.len());
+
+    match SystemTime::now().duration_since(i.start_time) {
+        Ok(duration) => RuntimeVal::Number(duration.as_secs_f64()), // for now just returns the number of nano seconds
+        Err(e) => panic!("{e}")
+    }
+}
+
+fn builtin_unix_time<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+    assert!(args.is_empty(), "Expected 0 args, got {}", args.len());
+    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(d) => RuntimeVal::Number(d.as_secs_f64()),
+        Err(e) => panic!("{e}")
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {

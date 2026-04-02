@@ -345,7 +345,7 @@ fn builtin_len<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> R
     );
     match &args[0] {
         RuntimeVal::String(string) => RuntimeVal::Number(string.len() as f64),
-        _ => panic!("len: Object {} has no length property", &args[0]),
+        _ => panic!("len(): Object {} has no length property", &args[0]),
     }
 }
 

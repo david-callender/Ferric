@@ -145,10 +145,12 @@ impl<'a, W: Write> Interpreter<'a, W> {
         match func_name {
             RuntimeVal::Function(fn_name) => match fn_name.as_str() {
                 "print" => builtin_print(self, args),
+                "substr" => builtin_substr(self, args),
+                "len" => builtin_len(self, args),
                 "clock" => builtin_clock(self, args),
                 "unix_time" => builtin_unix_time(self, args),
                 "sleep" => builtin_sleep(self, args),
-                _ => panic!(""),
+                _ => panic!("Function {} was not found", fn_name),
             },
             _ => panic!("Invalid function call"),
         }
@@ -292,6 +294,61 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     RuntimeVal::Null
 }
 
+fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+    assert!(
+        args.len() == 3,
+        "substr(): Expect 3 args, got {}",
+        args.len(),
+    );
+    if let RuntimeVal::String(string) = &args[0] {
+        let start = expect_int(
+            &args[1],
+            format!(
+                "substr(): Non-integer substring starting index: {}",
+                &args[1]
+            )
+            .as_str(),
+        );
+        let end = expect_int(
+            &args[2],
+            format!("substr(): Non-integer substring ending index: {}", &args[2]).as_str(),
+        );
+
+        assert!(
+            start >= 0 && end >= 0,
+            "substr(): String indices cannot be negative"
+        );
+        assert!(
+            start < string.len() as i64,
+            "substr(): String starting index out of bounds: {}",
+            start
+        );
+        assert!(
+            end < string.len() as i64,
+            "substr(): String ending index out of bounds: {}",
+            end
+        );
+
+        return RuntimeVal::String(string[(start as usize)..(end as usize)].to_string());
+    }
+    panic!(
+        "substr(): Cannot take substring of non-string object: {}",
+        &args[0]
+    );
+}
+
+fn builtin_len<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+    assert!(
+        args.len() == 1,
+        "len(): Expect 1 argument, got {}",
+        args.len()
+    );
+    match &args[0] {
+        RuntimeVal::String(string) => RuntimeVal::Number(string.len() as f64),
+        _ => panic!("len(): Object {} has no length property", &args[0]),
+    }
+}
+
 fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.is_empty(),
@@ -332,6 +389,17 @@ fn builtin_sleep<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     }
 }
 
+// HELPER FUNCTIONS
+fn expect_int(val: &RuntimeVal, message: &str) -> i64 {
+    match val {
+        RuntimeVal::Number(num) => {
+            assert!(num.fract() == 0.0, "{message}");
+            *num as i64
+        }
+        _ => panic!("{message}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::panic;
@@ -354,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn interpreter() {
+    fn print_builtin() {
         let mut out = vec![];
 
         let expr = vec![
@@ -366,6 +434,32 @@ mod tests {
         interpreter.interpret(&expr);
 
         assert_eq!(out, b"4\n5\n");
+    }
+
+    #[test]
+    fn substr_len_builtins() {
+        let mut out = vec![];
+
+        let expr = vec![expr!(Call(
+            Ident("print"),
+            [Call(
+                Ident("substr"),
+                [
+                    StrLit("foo bar baz"),
+                    NumLit(4.0),
+                    Binary(
+                        Call(Ident("len"), [StrLit("foo bar baz")]),
+                        Subtract,
+                        NumLit(4.0)
+                    ),
+                ]
+            )]
+        ))];
+
+        let mut interpreter = Interpreter::new(&mut out, 0);
+        interpreter.interpret(&expr);
+
+        assert_eq!(out, b"bar\n");
     }
 
     #[test]

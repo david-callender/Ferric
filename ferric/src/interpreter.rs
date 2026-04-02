@@ -290,31 +290,53 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
 fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 3,
-        "Incorrect number of arguments supplied to substr"
+        "substr(): Expect 3 args, got {}",
+        args.len(),
     );
     if let RuntimeVal::String(string) = &args[0] {
-        let start = expect_int(&args[1], "Non-integer substring starting index");
-        let end = expect_int(&args[2], "Non-integer substring ending index");
+        let start = expect_int(
+            &args[1],
+            "substr(): Non-integer substring starting index: {}",
+            &args[1],
+        );
+        let end = expect_int(
+            &args[2],
+            "substr(): Non-integer substring ending index: {}",
+            &args[2],
+        );
 
-        assert!(start >= 0 && end >= 0, "String indices cannot be negative");
         assert!(
-            start < string.len() as i64 && end < string.len() as i64,
-            "String index out of bounds"
+            start >= 0 && end >= 0,
+            "substr(): String indices cannot be negative"
+        );
+        assert!(
+            start < string.len() as i64,
+            "substr(): String starting index out of bounds: {}",
+            start
+        );
+        assert!(
+            end < string.len() as i64,
+            "substr(): String ending index out of bounds: {}",
+            end
         );
 
         return RuntimeVal::String(string[(start as usize)..(end as usize)].to_string());
     }
-    panic!("Cannot take substring of non-string object");
+    panic!(
+        "substr(): Cannot take substring of non-string object: {}",
+        &args[0]
+    );
 }
 
 fn builtin_len<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 1,
-        "Incorrect number of arguments supplied to len"
+        "len(): Expect 1 argument, got {}",
+        args.len()
     );
     match &args[0] {
         RuntimeVal::String(string) => RuntimeVal::Number(string.len() as f64),
-        _ => panic!("The object {} has no length property", &args[0]),
+        _ => panic!("len: Object {} has no length property", &args[0]),
     }
 }
 

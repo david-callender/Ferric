@@ -217,7 +217,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         let left = self.parse_comparisons();
 
         if self.matches(Token::Eq) {
-            let right = self.parse_comparisons();
+            let right = self.parse_expr();
 
             let Expr::VarGet { slot } = left else {
                 panic!("Expected variable name to be an identifier");

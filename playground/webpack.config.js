@@ -34,7 +34,7 @@ module.exports = {
       crateDirectory: __dirname,
     }),
   ],
-  mode: "production",
+  mode: "development",
   experiments: {
     asyncWebAssembly: true,
   },

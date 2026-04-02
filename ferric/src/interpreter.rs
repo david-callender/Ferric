@@ -148,10 +148,18 @@ impl<'a, W: Write> Interpreter<'a, W> {
                             writeln!(self.output).expect("Failed to write to output");
                         } else {
                             for val in args {
-                                writeln!(self.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
+                                write!(self.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
                             }
+                            writeln!(self.output).expect("Failed to write to output");
                         }
                         RuntimeVal::Null
+                    }
+                    "modulo" => {
+                        let [RuntimeVal::Number(a), RuntimeVal::Number(b)] = args[..] else {
+                            panic!("modulo() expected two number arguments");
+                        };
+
+                        RuntimeVal::Number(a % b)
                     }
                     _ => panic!(""),
                 }
@@ -224,7 +232,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             Expr::VarSet { slot, value } => {
                 self.var_storage[*slot] = self.evaluate(value);
                 RuntimeVal::Null
-            },
+            }
             Expr::If {
                 cond,
                 then,
@@ -393,15 +401,20 @@ mod tests {
     fn test_var_set() {
         let mut out = sink();
         let mut interpreter = Interpreter::new(&mut out, 1);
-        
-        let expr = vec![
-            Expr::Decl { value: Box::new(Expr::Literal(RuntimeVal::Number(4.0))), slot: 0 }, // declare variable
-            Expr::VarSet { slot: 0, value: Box::new(Expr::Literal(RuntimeVal::Number(5.0))) }, // update variable
-        ];
- 
-        interpreter.interpret(&expr);
-        
-        assert_eq!(interpreter.var_storage[0],RuntimeVal::Number(5.0));
 
+        let expr = vec![
+            Expr::Decl {
+                value: Box::new(Expr::Literal(RuntimeVal::Number(4.0))),
+                slot: 0,
+            }, // declare variable
+            Expr::VarSet {
+                slot: 0,
+                value: Box::new(Expr::Literal(RuntimeVal::Number(5.0))),
+            }, // update variable
+        ];
+
+        interpreter.interpret(&expr);
+
+        assert_eq!(interpreter.var_storage[0], RuntimeVal::Number(5.0));
     }
 }

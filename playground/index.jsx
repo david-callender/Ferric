@@ -6,6 +6,8 @@ import { createRoot } from "react-dom/client";
 import Editor from "@monaco-editor/react";
 import { useEffect } from "react";
 
+import "./style.css";
+
 //@ts-check
 
 const INITIAL_TEXT = `print("Hello, World!");`;
@@ -50,7 +52,7 @@ const Main = () => {
             className="border bg-slate-700 p-2 text-white border-black grow overflow-auto"
             ref={output}
           ></pre>
-          <div className="border bg-slate-700 p-2 text-white border-black grow overflow-auto"> 
+          {/*<div className="border bg-slate-700 p-2 text-white border-black grow overflow-auto">
             <p class="text-base mb-4">
               Ferric is an expression based language, so each expression must
               evaluate to a value. Here's a list of every implemented
@@ -246,7 +248,7 @@ const Main = () => {
             </ul>
             <pre class="bg-gray-100 p-4 rounded-md overflow-x-auto">
             </pre>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
@@ -267,10 +269,11 @@ The Ferric runtime is separated into 3 parts:
 Ferric is an *expression based language*, similar to Haskell or OCaml, where everything must evaluate to an expression.
 */
 
-const app = document.createElement("div");
-app.id = "app";
-document.body.append(app);
+// const app = document.createElement("div");
+// app.id = "app";
+// document.body.append(app);
 
-const root = createRoot(app);
+const body = document.body;
+const root = createRoot(body);
 
 root.render(<Main />);

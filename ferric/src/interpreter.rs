@@ -300,7 +300,7 @@ fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     );
 
     match SystemTime::now().duration_since(i.start_time) {
-        Ok(duration) => RuntimeVal::Number(duration.as_secs_f64()), // for now just returns the number of nano seconds
+        Ok(duration) => RuntimeVal::Number(duration.as_secs_f64()), 
         Err(e) => panic!("{e}"),
     }
 }
@@ -334,6 +334,7 @@ fn builtin_sleep<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
     use std::io::{sink, stdout};
 
     use crate::expr;
@@ -454,15 +455,23 @@ mod tests {
     #[test]
     fn clock() {
         let mut out = sink();
-
-        let test = vec![expr!(Call(Ident("sleep"), [NumLit(1.0)])), expr!(Decl(Call(Ident("clock"), []), 0))];
-        let eps = 0.006; // margin of time for program to run
-
         let mut interpreter = Interpreter::new(&mut out, 1);
+
+        let test = vec![
+            expr!(Call(Ident("sleep"), [NumLit(1.0)])),
+            expr!(Decl(Call(Ident("clock"), []), 0)),
+        ];
+        let eps = 0.006; // margin of time for program to run after sleep
 
         interpreter.interpret(&test);
         if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
-            assert!(eps > (c-1.0).abs(), "clock ran longer than expected! {}", c-1.0);
+            assert!(
+                eps > (c - 1.0).abs(),
+                "clock ran longer than expected! {}",
+                c - 1.0
+            );
+        } else {
+            panic!("declared variable was not a number!");
         }
     }
 
@@ -479,11 +488,13 @@ mod tests {
         if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
             match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
                 Ok(actual) => {
-                    assert!(c - actual.as_secs_f64() < eps, "unix time not reported correctly");
+                    assert!(
+                        c - actual.as_secs_f64() < eps,
+                        "unix time not reported correctly"
+                    );
                 }
-                Err(e) => panic!("{e}")
+                Err(e) => panic!("{e}"),
             }
-            
         }
     }
 }

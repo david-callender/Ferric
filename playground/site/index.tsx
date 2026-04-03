@@ -7,13 +7,14 @@ import Editor from "@monaco-editor/react";
 import { useEffect } from "react";
 
 import "./style.css";
+import { editor } from "monaco-editor";
 
 const INITIAL_TEXT = `print("Hello, World!");`;
 
 const Main = () => {
   const [text, setText] = useState(INITIAL_TEXT);
   const output = useRef<HTMLPreElement>(null);
-  
+
   useEffect(() => {
     console.log(output.current);
     if (output.current != null) {
@@ -21,29 +22,37 @@ const Main = () => {
     }
   }, [output]);
 
+  const handleRun = () => {
+    if (output.current === null) {
+      alert("Couldn't find output");
+    } else {
+      ferric(text, output.current);
+    }
+  };
+
+  const handleChange = (
+    value: string | undefined,
+    _: editor.IModelContentChangedEvent
+  ) => {
+    setText(value ?? "undefined");
+  };
+
   return (
-    <div className="min-h-screen bg-slate-800 px-6 py-4">
+    <div className="min-h-screen bg-slate-900 p-6 text-white">
+      <div className="text-center text-3xl font-bold">Ferric Playground</div>
       <button
-        className="m-4 rounded border bg-slate-300 px-2 py-1"
-        onClick={() => {
-          if (output.current === null) {
-            alert("Couldn't find output");
-          } else {
-            ferric(text, output.current);
-          }
-        }}
+        className="mb-2 rounded border border-black bg-slate-700 px-2 py-1 hover:cursor-pointer"
+        onClick={handleRun}
       >
         Run
       </button>
       <div className="grid grid-cols-2 gap-4">
-        <div className="border">
+        <div className="border border-black">
           <Editor
             defaultValue={INITIAL_TEXT}
             theme="vs-dark"
-            height="90vh"
-            onChange={(value, ev) => {
-              setText(value ?? "undefined");
-            }}
+            height="70vh"
+            onChange={handleChange}
             options={{
               minimap: {
                 enabled: false,
@@ -51,11 +60,13 @@ const Main = () => {
             }}
           />
         </div>
-        <div className="flex h-[90vh] flex-col gap-4">
+        <div className="flex h-[70vh] flex-col gap-4">
           <pre
-            className="grow overflow-auto border border-black bg-slate-700 p-2 text-white"
+            className="grow overflow-auto border border-black bg-slate-800 p-2"
             ref={output}
-          ></pre>
+          >
+            Output will appear here
+          </pre>
           {/*<div className="border bg-slate-700 p-2 text-white border-black grow overflow-auto">
             <p class="text-base mb-4">
               Ferric is an expression based language, so each expression must

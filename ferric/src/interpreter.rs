@@ -324,7 +324,7 @@ fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -
             start
         );
         assert!(
-            end < string.len() as i64,
+            end <= string.len() as i64,
             "substr(): String ending index out of bounds: {}",
             end
         );

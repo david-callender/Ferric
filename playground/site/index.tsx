@@ -85,24 +85,6 @@ const Main: FC = () => {
   );
 };
 
-/*
-## Ferric Documentation
-
-[Ferric GitHub](https://github.com/david-callender/Ferric)
-
-Ferric is a reference-counted, tree-walking scripting language implemented in Rust. Instead of using a garbage collector to manage memory, Ferric keeps track of how many times a variable is referenced and deletes the variable when it is no longer referenced. As opposed to other languages that compile to bytecode, Ferric directly interprets the expressions produced by the parser. Both of these decisions make development simpler while only compromising minimal speed.
-
-The Ferric runtime is separated into 3 parts:
-* The Lexer - It is the Lexer's job to take the incoming stream of bytes and figure out which ones should be grouped together. These groups are called `Tokens`. These tokens can be a keyword, an identifier, a number literal, etc. The Lexer also strips out any whitespace and comments.
-* The Parser - After recieving the stream of tokens output by the Lexer, the Parser figures out in which order they need to be evaluated in. This order is enforced using an Abstract Syntax Tree, or AST. Each node in the tree might contain other AST nodes, allowing for expressions to contain other expressions.
-
-Ferric is an *expression based language*, similar to Haskell or OCaml, where everything must evaluate to an expression.
-*/
-
-// const app = document.createElement("div");
-// app.id = "app";
-// document.body.append(app);
-
 const body = document.body;
 const root = createRoot(body);
 

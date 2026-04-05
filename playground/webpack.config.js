@@ -14,13 +14,6 @@ module.exports = {
   },
   module: {
     rules: [
-      
-            // {
-            //   test: /\.tsx?$/,
-            //   use: "ts-loader",
-            //   exclude: /node_modules/,
-            // },
-          
       {
         test: /\.tsx$/i,
         exclude: /node_modules/,
@@ -28,7 +21,11 @@ module.exports = {
           loader: "babel-loader",
           options: {
             targets: "defaults",
-            presets: ["@babel/preset-env", "@babel/preset-react", "@babel/preset-typescript"],
+            presets: [
+              "@babel/preset-env",
+              "@babel/preset-react",
+              "@babel/preset-typescript",
+            ],
           },
         },
       },
@@ -39,8 +36,8 @@ module.exports = {
       },
       {
         test: /\.md$/i,
-        use: ["raw-loader"]
-      }
+        use: ["raw-loader"],
+      },
     ],
   },
   plugins: [
@@ -51,10 +48,12 @@ module.exports = {
       crateDirectory: __dirname,
     }),
     new CopyPlugin({
-      patterns: [{
-        from: "site/ferric_logo.svg"
-      }]
-    })
+      patterns: [
+        {
+          from: "site/ferric_logo.svg",
+        },
+      ],
+    }),
   ],
   mode: "development",
   experiments: {

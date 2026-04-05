@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn one_byte() {
         assert_eq!(
-            collect_tokens("(){};,+-*/"),
+            collect_tokens("(){};,+-*/%"),
             vec![
                 T::OpenParen,
                 T::CloseParen,
@@ -279,7 +279,8 @@ mod tests {
                 T::Plus,
                 T::Minus,
                 T::Star,
-                T::Slash
+                T::Slash,
+                T::Percent
             ]
         );
     }

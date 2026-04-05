@@ -154,13 +154,6 @@ impl<'a, W: Write> Interpreter<'a, W> {
                         }
                         RuntimeVal::Null
                     }
-                    "modulo" => {
-                        let [RuntimeVal::Number(a), RuntimeVal::Number(b)] = args[..] else {
-                            panic!("modulo() expected two number arguments");
-                        };
-
-                        RuntimeVal::Number(a % b)
-                    }
                     _ => panic!(""),
                 }
             }

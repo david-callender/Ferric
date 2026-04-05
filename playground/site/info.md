@@ -15,28 +15,24 @@ Ferric is an expression based language, so each expression must evaluate to a va
 
 ## Built-in functions
 
- - `print`
+- `print`
 ```ts
-// Prints a serialized version of the input to the output variable stored in the interpreter.
+// Prints a serialized version of the input to the output variable stored in the
+// interpreter.
 print(...args: any)
 ```
 
-- `fs_read`
+- `substr`
 ```ts
-// Reads from a file on disk and returns its contents as a string. Panics if the file doesn’t exist.
-fs_read(file: string) -> string
+// Returns a specific substring of a string given the starting and ending byte
+// of the substring. Panics if start or end is not an integer.
+substr(s: string, start: number, end: number) -> string
 ```
 
-- `fs_write`
+- `len`
 ```ts
-// Overwrites a file on disk with new contents. If the file doesn’t exist, create a new file.
-fs_write(file: string, contents: string)
-```
-
-- `unix_time`
-```ts
-// Returns the number of seconds since Jan 1st, 1970 (UNIX Epoch) as a floating point number.
-unix_time() -> number
+// Returns the length of a string in bytes.
+len(s: string) -> number
 ```
 
 - `clock`
@@ -45,14 +41,15 @@ unix_time() -> number
 clock() -> number
 ```
 
-- `substring`
+- `unix_time`
 ```ts
-// Returns a specific substring of a string given the starting and ending byte of the substring. Panics if start or end is not an integer.
-substring(s: string, start: number, end: number) -> string
+// Returns the number of seconds since Jan 1st, 1970 (UNIX Epoch) as a floating
+// point number.
+unix_time() -> number
 ```
 
-- `strlen`
-```ts
-// Returns the length of a string in bytes.
-strlen(s: string) -> number
-```
+## Links
+
+* [GitHub](https://github.com/david-callender/Ferric)
+* [Submit an issue](https://github.com/david-callender/Ferric/issues/new)
+* [Ferric Wiki](https://github.com/david-callender/Ferric/wiki)

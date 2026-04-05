@@ -21,7 +21,7 @@ module.exports = {
             // },
           
       {
-        test: /\.tsx$/,
+        test: /\.tsx$/i,
         exclude: /node_modules/,
         use: {
           loader: "babel-loader",
@@ -36,6 +36,10 @@ module.exports = {
         exclude: /node_modules/,
         use: ["style-loader", "css-loader", "postcss-loader"],
       },
+      {
+        test: /\.md$/i,
+        use: ["raw-loader"]
+      }
     ],
   },
   plugins: [

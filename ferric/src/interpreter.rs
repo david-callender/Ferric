@@ -566,26 +566,23 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn unix() {
-    //     let mut out = sink();
+    #[test]
+    fn unix() {
+        let mut out = sink();
 
-    //     let eps = 1.0;
-    //     let test = vec![expr!(Decl(Call(Ident("unix_time"), []), 0))];
+        let eps = 1.0;
+        let test = vec![expr!(Decl(Call(Ident("unix_time"), []), 0))];
 
-    //     let mut interpreter = Interpreter::new(&mut out, 1);
+        let mut interpreter = Interpreter::new(&mut out, 1);
 
-    //     interpreter.interpret(&test);
-    //     if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
-    //         match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-    //             Ok(actual) => {
-    //                 assert!(
-    //                     c - actual.as_secs_f64() < eps,
-    //                     "unix time not reported correctly"
-    //                 );
-    //             }
-    //             Err(e) => panic!("{e}"),
-    //         }
-    //     }
-    // }
+        interpreter.interpret(&test);
+        let RuntimeVal::Number(c) = interpreter.var_storage[0] else {
+            panic!("invalid var in var_storage")
+        };
+        let elapsed = Utc::now() - (DateTime::UNIX_EPOCH);
+        assert!(
+            c - elapsed.as_seconds_f64() < eps,
+            "unix time not reported correctly"
+        );
+    }
 }

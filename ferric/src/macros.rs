@@ -71,6 +71,12 @@ macro_rules! expr {
             slot: $slot,
         }
     };
+    (VarSet($vn:ident$v:tt, $slot:expr)) => {
+        Expr::VarSet {
+            value: Box::new(expr!($vn$v)),
+            slot: $slot,
+        }
+    };
     (Block{$($ln:ident$l:tt),* $(,)?}) => {
         Expr::Block(vec![$(expr!($ln$l)),*])
     };
@@ -81,11 +87,11 @@ macro_rules! expr {
             otherwise: None,
         }
     };
-    (If{$cn:ident$($c:tt)?, $tn:ident$($t:tt)?, $on:ident$($o:tt)?}) => {
+    (If{$cn:ident$c:tt, $tn:ident$t:tt, $on:ident$o:tt}) => {
         Expr::If {
-            cond: Box::new(expr!($cn$($c)?)),
-            then: Box::new(expr!($tn$($t)?)),
-            otherwise: Some(Box::new(expr!($on$($o)?))),
+            cond: Box::new(expr!($cn$c)),
+            then: Box::new(expr!($tn$t)),
+            otherwise: Some(Box::new(expr!($on$o))),
         }
     };
     (While{$cn:ident$c:tt, $bn:ident$b:tt}) => {

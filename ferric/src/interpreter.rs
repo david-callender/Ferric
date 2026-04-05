@@ -80,14 +80,14 @@ impl<'a, W: Write> Interpreter<'a, W> {
     }
 
     fn operation_modulo(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
-	match (left, right) {
-	    (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
-		assert_eq!(n1.fract(), 0.0, "Cannot modulo non-integer {n1}");
-		assert_eq!(n2.fract(), 0.0, "Cannot modulo non-integer {n2}");
-		RuntimeVal::Number(((n1 as i64) % (n2 as i64)) as f64)
-	    }
-	    _ => panic!("Cannot take modulo of non-numbers"),
-	}
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
+                assert_eq!(n1.fract(), 0.0, "Cannot modulo non-integer {n1}");
+                assert_eq!(n2.fract(), 0.0, "Cannot modulo non-integer {n2}");
+                RuntimeVal::Number(((n1 as i64) % (n2 as i64)) as f64)
+            }
+            _ => panic!("Cannot take modulo of non-numbers"),
+        }
     }
 
     fn unary_num_negate(&self, right: RuntimeVal) -> RuntimeVal {
@@ -193,7 +193,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     BinaryOp::Subtract => self.operation_subtract(left_val, right_val),
                     BinaryOp::Multiply => self.operation_multiply(left_val, right_val),
                     BinaryOp::Divide => self.operation_divide(left_val, right_val),
-		    BinaryOp::Modulo => self.operation_modulo(left_val, right_val),
+                    BinaryOp::Modulo => self.operation_modulo(left_val, right_val),
                     BinaryOp::Equal => self.operation_equal(left_val, right_val),
                     BinaryOp::NotEqual => self.operation_neq(left_val, right_val),
                     BinaryOp::GreaterThan => self.operation_greater_than(left_val, right_val),
@@ -369,7 +369,7 @@ fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     );
 
     match SystemTime::now().duration_since(i.start_time) {
-        Ok(duration) => RuntimeVal::Number(duration.as_secs_f64()), 
+        Ok(duration) => RuntimeVal::Number(duration.as_secs_f64()),
         Err(e) => panic!("{e}"),
     }
 }
@@ -491,8 +491,8 @@ mod tests {
         let expr = expr!(Binary(NumLit(4.0), Divide, NumLit(5.0)));
         assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(0.8));
 
-	let expr = expr!(Binary(NumLit(15.0), Modulo, NumLit(4.0)));
-	assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(3.0));
+        let expr = expr!(Binary(NumLit(15.0), Modulo, NumLit(4.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(3.0));
     }
 
     #[test]

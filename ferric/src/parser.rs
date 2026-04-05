@@ -282,23 +282,19 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 
     fn parse_mult_div_mod(&mut self) -> Expr {
         let left = self.parse_unary_op();
-	let operation = match self.is_one_of([
-	    Token::Star,
-	    Token::Slash,
-	    Token::Percent,
-	]) {
-	    Some(Token::Star) => BinaryOp::Multiply,
-	    Some(Token::Slash) => BinaryOp::Divide,
-	    Some(Token::Percent) => BinaryOp::Modulo,
-	    Some(_) => unreachable!(),
-	    None => return left,
-	};
-	let right = self.parse_unary_op();
-	Expr::Binary {
-	    left: Box::new(left),
-	    operation,
-	    right: Box::new(right),
-	}
+        let operation = match self.is_one_of([Token::Star, Token::Slash, Token::Percent]) {
+            Some(Token::Star) => BinaryOp::Multiply,
+            Some(Token::Slash) => BinaryOp::Divide,
+            Some(Token::Percent) => BinaryOp::Modulo,
+            Some(_) => unreachable!(),
+            None => return left,
+        };
+        let right = self.parse_unary_op();
+        Expr::Binary {
+            left: Box::new(left),
+            operation,
+            right: Box::new(right),
+        }
     }
 
     fn parse_unary_op(&mut self) -> Expr {
@@ -440,9 +436,9 @@ mod tests {
 
     #[test]
     fn modulo() {
-	let mut parser = Parser::new(tokens!(NumLit(10.0), Percent, NumLit(2.0)));
-	let target = expr!(Binary(NumLit(10.0), Modulo, NumLit(2.0)));
-	assert_eq!(parser.parse_expr(), target);
+        let mut parser = Parser::new(tokens!(NumLit(10.0), Percent, NumLit(2.0)));
+        let target = expr!(Binary(NumLit(10.0), Modulo, NumLit(2.0)));
+        assert_eq!(parser.parse_expr(), target);
     }
 
     #[test]

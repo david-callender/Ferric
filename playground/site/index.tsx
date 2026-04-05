@@ -16,17 +16,18 @@ import infoMarkdown from "./info.md";
 const INITIAL_TEXT = `print("Hello, World!");`;
 
 const FerricInfo: FC = () => {
-  return (<Markdown>
-    {infoMarkdown}
-  </Markdown>)
-}
+  return (
+    <article className="prose prose-invert prose-code:before:content-none prose-code:after:content-none mx-auto max-w-4xl text-lg">
+      <Markdown>{infoMarkdown}</Markdown>
+    </article>
+  );
+};
 
 const Main: FC = () => {
   const [text, setText] = useState(INITIAL_TEXT);
   const output = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
-    console.log(output.current);
     if (output.current != null) {
       init(output.current);
     }
@@ -56,7 +57,7 @@ const Main: FC = () => {
       >
         Run
       </button>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="mb-8 grid grid-cols-2 gap-4">
         <div className="border border-black">
           <Editor
             defaultValue={INITIAL_TEXT}
@@ -77,11 +78,9 @@ const Main: FC = () => {
           >
             Output will appear here
           </pre>
-          <div className="overflow-auto prose prose-zinc">
-            <FerricInfo />
-          </div>
         </div>
       </div>
+      <FerricInfo />
     </div>
   );
 };

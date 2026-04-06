@@ -21,6 +21,7 @@ pub enum Token {
     Tilde,        // ~
     Star,         // *
     Slash,        // /
+    Percent,      // %
     Greater,      // >
     GreaterEq,    // >=
     Less,         // <
@@ -57,6 +58,7 @@ impl std::fmt::Display for Token {
             Token::Tilde => write!(f, "~"),
             Token::Star => write!(f, "*"),
             Token::Slash => write!(f, "/"),
+            Token::Percent => write!(f, "%"),
             Token::Greater => write!(f, ">"),
             Token::GreaterEq => write!(f, ">="),
             Token::Less => write!(f, "<"),
@@ -237,6 +239,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
                 b'-' => Token::Minus,
                 b'*' => Token::Star,
                 b'/' => Token::Slash,
+                b'%' => Token::Percent,
                 b'~' => Token::Tilde,
 
                 b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c),
@@ -265,7 +268,7 @@ mod tests {
     #[test]
     fn one_byte() {
         assert_eq!(
-            collect_tokens("(){};,+-*/"),
+            collect_tokens("(){};,+-*/%"),
             vec![
                 T::OpenParen,
                 T::CloseParen,
@@ -276,7 +279,8 @@ mod tests {
                 T::Plus,
                 T::Minus,
                 T::Star,
-                T::Slash
+                T::Slash,
+                T::Percent
             ]
         );
     }

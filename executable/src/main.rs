@@ -8,6 +8,8 @@ fn ferric_main(source: &str) {
 
     let mut parser = Parser::new(lexer);
     let (expr, var_storage_size) = parser.parse();
+    
+    println!("{expr:?}");
 
     let mut output = stdout();
 

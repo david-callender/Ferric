@@ -298,8 +298,9 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
         writeln!(i.output).expect("Failed to write to output");
     } else {
         for val in args {
-            writeln!(i.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
+            write!(i.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
         }
+        writeln!(i.output).expect("Failed to write to output");
     }
     RuntimeVal::Null
 }

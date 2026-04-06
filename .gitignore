@@ -1,1 +1,4 @@
 /target
+/playground/dist
+/playground/node_modules
+/playground/pkg

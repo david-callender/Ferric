@@ -1,17 +1,15 @@
-import { ferric, init } from "../pkg";
-import React, { FC, useState } from "react";
-import { useRef } from "react";
+import { Editor } from "@monaco-editor/react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-
-import Editor from "@monaco-editor/react";
-import { useEffect } from "react";
-
-import "./style.css";
-import { editor } from "monaco-editor";
-
 import Markdown from "react-markdown";
 
+import { ferric, init } from "../pkg";
+
 import infoMarkdown from "./info.md";
+import "./style.css";
+
+import type { editor } from "monaco-editor";
+import type { FC } from "react";
 
 const INITIAL_TEXT = `print("Hello, World!");`;
 
@@ -28,12 +26,12 @@ const Main: FC = () => {
   const output = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
-    if (output.current != null) {
+    if (output.current !== null) {
       init(output.current);
     }
   }, [output]);
 
-  const handleRun = () => {
+  const handleRun = (): void => {
     if (output.current === null) {
       alert("Couldn't find output");
     } else {
@@ -44,7 +42,7 @@ const Main: FC = () => {
   const handleChange = (
     value: string | undefined,
     _: editor.IModelContentChangedEvent
-  ) => {
+  ): void => {
     setText(value ?? "undefined");
   };
 
@@ -85,7 +83,5 @@ const Main: FC = () => {
   );
 };
 
-const body = document.body;
-const root = createRoot(body);
-
+const root = createRoot(document.body);
 root.render(<Main />);

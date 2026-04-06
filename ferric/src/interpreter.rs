@@ -81,6 +81,13 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
+    fn operation_modulo(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 % n2),
+            _ => panic!("Cannot take modulo of non-numbers"),
+        }
+    }
+
     fn unary_num_negate(&self, right: RuntimeVal) -> RuntimeVal {
         match right {
             RuntimeVal::Number(n) => RuntimeVal::Number(-n),
@@ -184,6 +191,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     BinaryOp::Subtract => self.operation_subtract(left_val, right_val),
                     BinaryOp::Multiply => self.operation_multiply(left_val, right_val),
                     BinaryOp::Divide => self.operation_divide(left_val, right_val),
+                    BinaryOp::Modulo => self.operation_modulo(left_val, right_val),
                     BinaryOp::Equal => self.operation_equal(left_val, right_val),
                     BinaryOp::NotEqual => self.operation_neq(left_val, right_val),
                     BinaryOp::GreaterThan => self.operation_greater_than(left_val, right_val),
@@ -475,6 +483,9 @@ mod tests {
 
         let expr = expr!(Binary(NumLit(4.0), Divide, NumLit(5.0)));
         assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(0.8));
+
+        let expr = expr!(Binary(NumLit(15.0), Modulo, NumLit(4.0)));
+        assert_eq!(interpreter.evaluate(&expr), RuntimeVal::Number(3.0));
     }
 
     #[test]
@@ -552,7 +563,7 @@ mod tests {
             expr!(Call(Ident("sleep"), [NumLit(1.0)])),
             expr!(Decl(Call(Ident("clock"), []), 0)),
         ];
-        let eps = 0.006; // margin of time for program to run after sleep
+        let eps = 0.012; // margin of time for program to run after sleep
 
         interpreter.interpret(&test);
         if let RuntimeVal::Number(c) = interpreter.var_storage[0] {

@@ -1,1 +1,2 @@
-let i = clock();
+let i = 15 % 4;
+print(i);

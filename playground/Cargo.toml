@@ -1,9 +1,7 @@
 [package]
-authors = ["The wasm-bindgen Developers"]
-edition = "2021"
-name = "hello_world"
-publish = false
-version = "0.0.0"
+name = "playground"
+version = "0.1.0"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
@@ -11,14 +9,18 @@ crate-type = ["cdylib"]
 [dependencies]
 chrono = "0.4.44"
 ferric = { version = "0.1.0", path = "../ferric" }
-wasm-bindgen = "0.2.114"
-web-sys = { version = "0.3.94", features = ['Document', 'Element', 'HtmlElement', 'Node', 'Window', 'HtmlPreElement'] }
-
-# [package.metadata.wasm-pack.profile.release]
-# wasm-opt = ['-O', '--enable-bulk-memory']
+wasm-bindgen = "0.2.117"
+web-sys = { version = "0.3.94", features = [
+    'Document',
+    'Element',
+    'HtmlElement',
+    'Node',
+    'Window',
+    'HtmlPreElement',
+] }
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+wasm-opt = ['-O4', '-all']
 
 [lints]
 workspace = true

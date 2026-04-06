@@ -11,8 +11,7 @@ export default defineConfig(
   js.configs.recommended,
   ts.configs.strictTypeChecked,
   ts.configs.stylisticTypeChecked,
-  // react.configs.flat.recommended,
-  // react.configs.flat["jsx-runtime"],
+  react.configs.flat.recommended,
   importX.flatConfigs.recommended,
   importX.flatConfigs.typescript,
   unicorn.configs.recommended,
@@ -42,7 +41,7 @@ export default defineConfig(
     },
     settings: {
       react: {
-        version: "detect",
+        version: "19",
       },
     },
     rules: {
@@ -112,7 +111,7 @@ export default defineConfig(
       // Other Rules
       eqeqeq: ["warn", "always", { null: "ignore" }],
       "@typescript-eslint/no-misused-promises": "off",
-      "react-hooks/set-state-in-effect": "off",
+      // "react-hooks/set-state-in-effect": "off",
     },
   },
   {

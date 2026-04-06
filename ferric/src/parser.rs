@@ -48,6 +48,7 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    Modulo,
     Equal,
     NotEqual,
     GreaterThan,
@@ -259,17 +260,17 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_add_subtract(&mut self) -> Expr {
-        let left = self.parse_multiply_divide();
+        let left = self.parse_mult_div_mod();
 
         if self.matches(Token::Plus) {
-            let right = self.parse_multiply_divide();
+            let right = self.parse_mult_div_mod();
             return Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Add,
                 right: Box::new(right),
             };
         } else if self.matches(Token::Minus) {
-            let right = self.parse_multiply_divide();
+            let right = self.parse_mult_div_mod();
             return Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Subtract,
@@ -279,24 +280,21 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         left
     }
 
-    fn parse_multiply_divide(&mut self) -> Expr {
+    fn parse_mult_div_mod(&mut self) -> Expr {
         let left = self.parse_unary_op();
-        if self.matches(Token::Star) {
-            let right = self.parse_unary_op();
-            return Expr::Binary {
-                left: Box::new(left),
-                operation: BinaryOp::Multiply,
-                right: Box::new(right),
-            };
-        } else if self.matches(Token::Slash) {
-            let right = self.parse_unary_op();
-            return Expr::Binary {
-                left: Box::new(left),
-                operation: BinaryOp::Divide,
-                right: Box::new(right),
-            };
+        let operation = match self.is_one_of([Token::Star, Token::Slash, Token::Percent]) {
+            Some(Token::Star) => BinaryOp::Multiply,
+            Some(Token::Slash) => BinaryOp::Divide,
+            Some(Token::Percent) => BinaryOp::Modulo,
+            Some(_) => unreachable!(),
+            None => return left,
+        };
+        let right = self.parse_unary_op();
+        Expr::Binary {
+            left: Box::new(left),
+            operation,
+            right: Box::new(right),
         }
-        left
     }
 
     fn parse_unary_op(&mut self) -> Expr {
@@ -433,6 +431,13 @@ mod tests {
     fn divide() {
         let mut parser = Parser::new(tokens!(NumLit(20.0), Slash, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Divide, NumLit(22.0)));
+        assert_eq!(parser.parse_expr(), target);
+    }
+
+    #[test]
+    fn modulo() {
+        let mut parser = Parser::new(tokens!(NumLit(10.0), Percent, NumLit(2.0)));
+        let target = expr!(Binary(NumLit(10.0), Modulo, NumLit(2.0)));
         assert_eq!(parser.parse_expr(), target);
     }
 

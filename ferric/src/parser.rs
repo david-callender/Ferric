@@ -119,98 +119,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn parse_expr(&mut self) -> Expr {
-        self.parse_keywords()
-    }
-
-    fn parse_keywords(&mut self) -> Expr {
-        if self.matches(Token::Let) {
-            self.parse_decl()
-        } else if self.matches(Token::If) {
-            self.parse_if()
-        } else if self.matches(Token::OpenBracket) {
-            self.parse_block()
-        } else if self.matches(Token::While) {
-            self.parse_while()
-        } else {
-            self.parse_var_set()
-        }
-    }
-
-    fn parse_decl(&mut self) -> Expr {
-        let name = self.consume_ident("Expected variable name after let");
-        self.consume(Token::Eq, "Expected '=' after let");
-        let init = self.parse_expr();
-        self.env
-            .last_mut()
-            .expect("no global env")
-            .insert(name, self.next_index);
-        let expr = Expr::Decl {
-            value: Box::new(init),
-            slot: self.next_index,
-        };
-        self.next_index += 1;
-        expr
-    }
-
-    fn parse_if(&mut self) -> Expr {
-        let cond = self.parse_expr();
-        self.consume(Token::OpenBracket, "Expected '{' after if condition");
-
-        let then = self.parse_block();
-
-        let otherwise = if self.matches(Token::Otherwise) {
-            let otherwise = if self.matches(Token::OpenBracket) {
-                self.parse_block()
-            } else if self.matches(Token::If) {
-                self.parse_if()
-            } else {
-                panic!("Expected '{{' or 'if' after 'otherwise'");
-            };
-
-            Some(Box::new(otherwise))
-        } else {
-            None
-        };
-
-        Expr::If {
-            cond: Box::new(cond),
-            then: Box::new(then),
-            otherwise,
-        }
-    }
-
-    fn parse_while(&mut self) -> Expr {
-        let cond = Box::new(self.parse_expr());
-        self.consume(Token::OpenBracket, "Expected '{' after while");
-        let body = Box::new(self.parse_block());
-        Expr::While { cond, body }
-    }
-
-    // assumes the leading Token::OpenBracket has already been consumed.
-    fn parse_block(&mut self) -> Expr {
-        if self.matches(Token::CloseBracket) {
-            return Expr::Block(vec![]);
-        }
-
-        // each block creates its own scope, so add a blank scope to the
-        // environment stack.
-        self.env.push(HashMap::new());
-
-        let mut exprs = vec![self.parse_expr()];
-        while self.matches(Token::Semi) {
-            if self.matches(Token::CloseBracket) {
-                exprs.push(Expr::Literal(RuntimeVal::Null));
-                self.env.pop().expect("misaligned environment stack");
-                return Expr::Block(exprs);
-            }
-            exprs.push(self.parse_expr());
-        }
-        self.consume(
-            Token::CloseBracket,
-            "Expected '}' after block. Check for a missing semicolon on the previous line",
-        );
-        self.env.pop().expect("misaligned environment stack");
-        Expr::Block(exprs)
+        self.parse_var_set()
     }
 
     fn parse_var_set(&mut self) -> Expr {
@@ -371,6 +280,10 @@ impl<I: Iterator<Item = Token>> Parser<I> {
                 .find_var(&identifier)
                 .map(|slot| Expr::VarGet { slot })
                 .unwrap_or(Expr::Ident(identifier)),
+            Token::Let => self.parse_decl(),
+            Token::If => self.parse_if(),
+            Token::OpenBracket => self.parse_block(),
+            Token::While => self.parse_while(),
             _ => panic!("expected basic token, got non-basic token {token}"),
         }
     }
@@ -381,6 +294,83 @@ impl<I: Iterator<Item = Token>> Parser<I> {
         let inner_expr = self.parse_expr();
         self.consume(Token::CloseParen, "unclosed paren block");
         inner_expr
+    }
+
+    fn parse_decl(&mut self) -> Expr {
+        let name = self.consume_ident("Expected variable name after let");
+        self.consume(Token::Eq, "Expected '=' after let");
+        let init = self.parse_expr();
+        self.env
+            .last_mut()
+            .expect("no global env")
+            .insert(name, self.next_index);
+        let expr = Expr::Decl {
+            value: Box::new(init),
+            slot: self.next_index,
+        };
+        self.next_index += 1;
+        expr
+    }
+
+    fn parse_if(&mut self) -> Expr {
+        let cond = self.parse_expr();
+        self.consume(Token::OpenBracket, "Expected '{' after if condition");
+
+        let then = self.parse_block();
+
+        let otherwise = if self.matches(Token::Otherwise) {
+            let otherwise = if self.matches(Token::OpenBracket) {
+                self.parse_block()
+            } else if self.matches(Token::If) {
+                self.parse_if()
+            } else {
+                panic!("Expected '{{' or 'if' after 'otherwise'");
+            };
+
+            Some(Box::new(otherwise))
+        } else {
+            None
+        };
+
+        Expr::If {
+            cond: Box::new(cond),
+            then: Box::new(then),
+            otherwise,
+        }
+    }
+
+    fn parse_while(&mut self) -> Expr {
+        let cond = Box::new(self.parse_expr());
+        self.consume(Token::OpenBracket, "Expected '{' after while");
+        let body = Box::new(self.parse_block());
+        Expr::While { cond, body }
+    }
+
+    // assumes the leading Token::OpenBracket has already been consumed.
+    fn parse_block(&mut self) -> Expr {
+        if self.matches(Token::CloseBracket) {
+            return Expr::Block(vec![]);
+        }
+
+        // each block creates its own scope, so add a blank scope to the
+        // environment stack.
+        self.env.push(HashMap::new());
+
+        let mut exprs = vec![self.parse_expr()];
+        while self.matches(Token::Semi) {
+            if self.matches(Token::CloseBracket) {
+                exprs.push(Expr::Literal(RuntimeVal::Null));
+                self.env.pop().expect("misaligned environment stack");
+                return Expr::Block(exprs);
+            }
+            exprs.push(self.parse_expr());
+        }
+        self.consume(
+            Token::CloseBracket,
+            "Expected '}' after block. Check for a missing semicolon on the previous line",
+        );
+        self.env.pop().expect("misaligned environment stack");
+        Expr::Block(exprs)
     }
 }
 

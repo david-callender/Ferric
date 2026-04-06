@@ -81,11 +81,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
     fn operation_modulo(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
         match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => {
-                assert_eq!(n1.fract(), 0.0, "Cannot modulo non-integer {n1}");
-                assert_eq!(n2.fract(), 0.0, "Cannot modulo non-integer {n2}");
-                RuntimeVal::Number(((n1 as i64) % (n2 as i64)) as f64)
-            }
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 % n2),
             _ => panic!("Cannot take modulo of non-numbers"),
         }
     }

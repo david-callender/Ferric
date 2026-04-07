@@ -98,7 +98,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn operation_equal(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
         match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 == n2),
-            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => RuntimeVal::Boolean(s1 == s2),
             _ => {
                 panic!("Tried to compare non-numbers!")
             }
@@ -107,7 +107,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn operation_neq(&self, left: RuntimeVal, right: RuntimeVal) -> RuntimeVal {
         match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 != n2),
-            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => RuntimeVal::Boolean(s1 != s2),
             _ => {
                 panic!("Tried to compare non-numbers!")
             }

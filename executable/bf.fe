@@ -1,0 +1,330 @@
+let input = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.";
+let mem_size = 500;
+
+
+let memory = "";
+let j = 0;
+while j < mem_size {
+    memory = memory + "00 ";
+    j = j + 1;
+};
+
+let p = 0;
+let i = 0;
+
+while i < len(input) {
+    let instr = substr(input, i, i + 1);
+
+    "print(i);
+    print(instr);
+    print(p);
+    print(memory);
+    print()";
+
+    if instr == ">" {
+        p = p + 1;
+    } otherwise if instr == "<" {
+        p = p - 1;
+    } otherwise if instr == "+" {
+        let byte_s = substr(memory, 3*p, 3*p+2);
+
+        let nibble = substr(byte_s, 0, 1);
+        let n1 = if nibble == "0" {0} otherwise
+        if nibble == "1" {1} otherwise
+        if nibble == "2" {2} otherwise
+        if nibble == "3" {3} otherwise
+        if nibble == "4" {4} otherwise
+        if nibble == "5" {5} otherwise
+        if nibble == "6" {6} otherwise
+        if nibble == "7" {7} otherwise
+        if nibble == "8" {8} otherwise
+        if nibble == "9" {9} otherwise
+        if nibble == "a" {10} otherwise
+        if nibble == "b" {11} otherwise
+        if nibble == "c" {12} otherwise
+        if nibble == "d" {13} otherwise
+        if nibble == "e" {14} otherwise
+        if nibble == "f" {15};
+
+        nibble = substr(byte_s, 1, 2);
+        let n2 = if nibble == "0" {0} otherwise
+        if nibble == "1" {1} otherwise
+        if nibble == "2" {2} otherwise
+        if nibble == "3" {3} otherwise
+        if nibble == "4" {4} otherwise
+        if nibble == "5" {5} otherwise
+        if nibble == "6" {6} otherwise
+        if nibble == "7" {7} otherwise
+        if nibble == "8" {8} otherwise
+        if nibble == "9" {9} otherwise
+        if nibble == "a" {10} otherwise
+        if nibble == "b" {11} otherwise
+        if nibble == "c" {12} otherwise
+        if nibble == "d" {13} otherwise
+        if nibble == "e" {14} otherwise
+        if nibble == "f" {15};
+        let n = 16*n1 + n2;
+        n = n + 1;
+        
+        if n == 256 {
+            n = 0;
+        };
+
+        n2 = n % 16;
+        n1 = (n - n2) / 16;
+
+        let n1_s = if n1 == 0 {"0"} otherwise
+        if n1 == 1 {"1"} otherwise
+        if n1 == 2 {"2"} otherwise
+        if n1 == 3 {"3"} otherwise
+        if n1 == 4 {"4"} otherwise
+        if n1 == 5 {"5"} otherwise
+        if n1 == 6 {"6"} otherwise
+        if n1 == 7 {"7"} otherwise
+        if n1 == 8 {"8"} otherwise
+        if n1 == 9 {"9"} otherwise
+        if n1 == 10 {"a"} otherwise
+        if n1 == 11 {"b"} otherwise
+        if n1 == 12 {"c"} otherwise
+        if n1 == 13 {"d"} otherwise
+        if n1 == 14 {"e"} otherwise
+        if n1 == 15 {"f"};
+
+        let n2_s = if n2 == 0 {"0"} otherwise
+        if n2 == 1 {"1"} otherwise
+        if n2 == 2 {"2"} otherwise
+        if n2 == 3 {"3"} otherwise
+        if n2 == 4 {"4"} otherwise
+        if n2 == 5 {"5"} otherwise
+        if n2 == 6 {"6"} otherwise
+        if n2 == 7 {"7"} otherwise
+        if n2 == 8 {"8"} otherwise
+        if n2 == 9 {"9"} otherwise
+        if n2 == 10 {"a"} otherwise
+        if n2 == 11 {"b"} otherwise
+        if n2 == 12 {"c"} otherwise
+        if n2 == 13 {"d"} otherwise
+        if n2 == 14 {"e"} otherwise
+        if n2 == 15 {"f"};
+
+        memory = (((substr(memory, 0, 3*p) + n1_s) + n2_s) + " ") + substr(memory, 3*(p + 1), len(memory));
+    } otherwise if instr == "-" {
+        let byte_s = substr(memory, 3*p, 3*p+2);
+
+        let nibble = substr(byte_s, 0, 1);
+        let n1 = if nibble == "0" {0} otherwise
+        if nibble == "1" {1} otherwise
+        if nibble == "2" {2} otherwise
+        if nibble == "3" {3} otherwise
+        if nibble == "4" {4} otherwise
+        if nibble == "5" {5} otherwise
+        if nibble == "6" {6} otherwise
+        if nibble == "7" {7} otherwise
+        if nibble == "8" {8} otherwise
+        if nibble == "9" {9} otherwise
+        if nibble == "a" {10} otherwise
+        if nibble == "b" {11} otherwise
+        if nibble == "c" {12} otherwise
+        if nibble == "d" {13} otherwise
+        if nibble == "e" {14} otherwise
+        if nibble == "f" {15};
+
+        nibble = substr(byte_s, 1, 2);
+        let n2 = if nibble == "0" {0} otherwise
+        if nibble == "1" {1} otherwise
+        if nibble == "2" {2} otherwise
+        if nibble == "3" {3} otherwise
+        if nibble == "4" {4} otherwise
+        if nibble == "5" {5} otherwise
+        if nibble == "6" {6} otherwise
+        if nibble == "7" {7} otherwise
+        if nibble == "8" {8} otherwise
+        if nibble == "9" {9} otherwise
+        if nibble == "a" {10} otherwise
+        if nibble == "b" {11} otherwise
+        if nibble == "c" {12} otherwise
+        if nibble == "d" {13} otherwise
+        if nibble == "e" {14} otherwise
+        if nibble == "f" {15};
+        let n = 16*n1 + n2;
+        n = n - 1;
+        
+        if n == -1 {
+            n = 255;
+        };
+
+        n2 = n % 16;
+        n1 = (n - n2) / 16;
+
+        let n1_s = if n1 == 0 {"0"} otherwise
+        if n1 == 1 {"1"} otherwise
+        if n1 == 2 {"2"} otherwise
+        if n1 == 3 {"3"} otherwise
+        if n1 == 4 {"4"} otherwise
+        if n1 == 5 {"5"} otherwise
+        if n1 == 6 {"6"} otherwise
+        if n1 == 7 {"7"} otherwise
+        if n1 == 8 {"8"} otherwise
+        if n1 == 9 {"9"} otherwise
+        if n1 == 10 {"a"} otherwise
+        if n1 == 11 {"b"} otherwise
+        if n1 == 12 {"c"} otherwise
+        if n1 == 13 {"d"} otherwise
+        if n1 == 14 {"e"} otherwise
+        if n1 == 15 {"f"};
+
+        let n2_s = if n2 == 0 {"0"} otherwise
+        if n2 == 1 {"1"} otherwise
+        if n2 == 2 {"2"} otherwise
+        if n2 == 3 {"3"} otherwise
+        if n2 == 4 {"4"} otherwise
+        if n2 == 5 {"5"} otherwise
+        if n2 == 6 {"6"} otherwise
+        if n2 == 7 {"7"} otherwise
+        if n2 == 8 {"8"} otherwise
+        if n2 == 9 {"9"} otherwise
+        if n2 == 10 {"a"} otherwise
+        if n2 == 11 {"b"} otherwise
+        if n2 == 12 {"c"} otherwise
+        if n2 == 13 {"d"} otherwise
+        if n2 == 14 {"e"} otherwise
+        if n2 == 15 {"f"};
+
+        memory = (((substr(memory, 0, 3*p) + n1_s) + n2_s) + " ") + substr(memory, 3*(p + 1), len(memory));
+    } otherwise if instr == "." {
+        let b = substr(memory, 3*p, 3*p+2);
+
+        if b == "20" {print(" ")} otherwise
+        if b == "21" {print("!")} otherwise
+        if b == "22" {print("\"")} otherwise
+        if b == "23" {print("#")} otherwise
+        if b == "24" {print("$")} otherwise
+        if b == "25" {print("%")} otherwise
+        if b == "26" {print("&")} otherwise
+        if b == "27" {print("'")} otherwise
+        if b == "28" {print("(")} otherwise
+        if b == "29" {print(")")} otherwise
+        if b == "2a" {print("*")} otherwise
+        if b == "2b" {print("+")} otherwise
+        if b == "2c" {print(",")} otherwise
+        if b == "2d" {print("-")} otherwise
+        if b == "2e" {print(".")} otherwise
+        if b == "2f" {print("/")} otherwise
+        if b == "30" {print("0")} otherwise
+        if b == "31" {print("1")} otherwise
+        if b == "32" {print("2")} otherwise
+        if b == "33" {print("3")} otherwise
+        if b == "34" {print("4")} otherwise
+        if b == "35" {print("5")} otherwise
+        if b == "36" {print("6")} otherwise
+        if b == "37" {print("7")} otherwise
+        if b == "38" {print("8")} otherwise
+        if b == "39" {print("9")} otherwise
+        if b == "3a" {print(":")} otherwise
+        if b == "3b" {print(";")} otherwise
+        if b == "3c" {print("<")} otherwise
+        if b == "3d" {print("=")} otherwise
+        if b == "3e" {print(">")} otherwise
+        if b == "3f" {print("?")} otherwise
+        if b == "40" {print("@")} otherwise
+        if b == "41" {print("A")} otherwise
+        if b == "42" {print("B")} otherwise
+        if b == "43" {print("C")} otherwise
+        if b == "44" {print("D")} otherwise
+        if b == "45" {print("E")} otherwise
+        if b == "46" {print("F")} otherwise
+        if b == "47" {print("G")} otherwise
+        if b == "48" {print("H")} otherwise
+        if b == "49" {print("I")} otherwise
+        if b == "4a" {print("J")} otherwise
+        if b == "4b" {print("K")} otherwise
+        if b == "4c" {print("L")} otherwise
+        if b == "4d" {print("M")} otherwise
+        if b == "4e" {print("N")} otherwise
+        if b == "4f" {print("O")} otherwise
+        if b == "50" {print("P")} otherwise
+        if b == "51" {print("Q")} otherwise
+        if b == "52" {print("R")} otherwise
+        if b == "53" {print("S")} otherwise
+        if b == "54" {print("T")} otherwise
+        if b == "55" {print("U")} otherwise
+        if b == "56" {print("V")} otherwise
+        if b == "57" {print("W")} otherwise
+        if b == "58" {print("X")} otherwise
+        if b == "59" {print("Y")} otherwise
+        if b == "5a" {print("Z")} otherwise
+        if b == "5b" {print("[")} otherwise
+        if b == "5c" {print("\\")} otherwise
+        if b == "5d" {print("]")} otherwise
+        if b == "5e" {print("^")} otherwise
+        if b == "5f" {print("_")} otherwise
+        if b == "60" {print("`")} otherwise
+        if b == "61" {print("a")} otherwise
+        if b == "62" {print("b")} otherwise
+        if b == "63" {print("c")} otherwise
+        if b == "64" {print("d")} otherwise
+        if b == "65" {print("e")} otherwise
+        if b == "66" {print("f")} otherwise
+        if b == "67" {print("g")} otherwise
+        if b == "68" {print("h")} otherwise
+        if b == "69" {print("i")} otherwise
+        if b == "6a" {print("j")} otherwise
+        if b == "6b" {print("k")} otherwise
+        if b == "6c" {print("l")} otherwise
+        if b == "6d" {print("m")} otherwise
+        if b == "6e" {print("n")} otherwise
+        if b == "6f" {print("o")} otherwise
+        if b == "70" {print("p")} otherwise
+        if b == "71" {print("q")} otherwise
+        if b == "72" {print("r")} otherwise
+        if b == "73" {print("s")} otherwise
+        if b == "74" {print("t")} otherwise
+        if b == "75" {print("u")} otherwise
+        if b == "76" {print("v")} otherwise
+        if b == "77" {print("w")} otherwise
+        if b == "78" {print("x")} otherwise
+        if b == "79" {print("y")} otherwise
+        if b == "7a" {print("z")} otherwise
+        if b == "7b" {print("{")} otherwise
+        if b == "7c" {print("|")} otherwise
+        if b == "7d" {print("}")} otherwise
+        if b == "7e" {print("~")};
+    } otherwise if instr == "[" {
+        let mem = substr(memory, 3*p, 3*p+2);
+        if mem == "00" {
+            i = i + 1;
+            let counter = 1;
+            while counter != 0 {
+                let b = substr(input, i, i + 1);
+                if b == "[" {
+                    counter = counter + 1;
+                };
+                if b == "]" {
+                    counter = counter - 1;
+                };
+                i = i + 1;
+            };
+            i = i - 1;
+        };
+    } otherwise if instr == "]" {
+        let mem = substr(memory, 3*p, 3*p+2);
+        if mem != "00" {
+            i = i - 1;
+            let counter = -1;
+            while counter != 0 {
+                let b = substr(input, i, i + 1);
+                if b == "[" {
+                    counter = counter + 1;
+                };
+                if b == "]" {
+                    counter = counter - 1;
+                };
+                i = i - 1;
+            };
+            i = i + 1;
+        };
+    };
+    i = i + 1;
+};
+
+print("\n");

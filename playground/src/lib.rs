@@ -29,7 +29,8 @@ impl Write for JsWriter {
 #[wasm_bindgen]
 pub fn init(output: HtmlPreElement) {
     std::panic::set_hook(Box::new(move |info| {
-        output.set_text_content(Some(&format!("Ferric ran into an error:\n{info}")));
+        let current = output.text_content().unwrap_or_default();
+        output.set_text_content(Some(&format!("{current}Ferric ran into an error:\n{info}")));
     }));
 }
 

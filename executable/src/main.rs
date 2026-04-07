@@ -4,16 +4,16 @@ use std::io::stdout;
 use ferric::{
     interpreter::Interpreter,
     lexer::Lexer,
-    loc::{Loc, ProgramSrc},
+    loc::{Loc, ProgramSrc, Span},
     parser::Parser,
 };
 
 fn ferric_main(source: &str) {
     let s = ProgramSrc::new(source.to_owned());
 
-    let loc = Loc::new(3, 0);
+    let span = Span::new(Loc::new(2, 0), Loc::new(7, 4));
 
-    println!("{}", loc.format(&s, "you did something wrong here"));
+    println!("{}", span.format(&s, "you did something wrong here"));
 
     return;
 

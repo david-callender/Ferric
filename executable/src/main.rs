@@ -11,9 +11,9 @@ use ferric::{
 fn ferric_main(source: &str) {
     let s = ProgramSrc::new(source.to_owned());
 
-    let loc = Loc::new(3, 0, 3);
+    let loc = Loc::new(3, 0);
 
-    println!("{}", loc.format(&s));
+    println!("{}", loc.format(&s, "you did something wrong here"));
 
     return;
 

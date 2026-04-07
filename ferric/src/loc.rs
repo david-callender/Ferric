@@ -14,6 +14,8 @@ impl ProgramSrc {
             }
         }
 
+        line_nums.push(src.len());
+
         Self { src, line_nums }
     }
 
@@ -25,34 +27,40 @@ impl ProgramSrc {
 pub struct Loc {
     line: usize,
     col: usize,
-    length: usize,
 }
 
 impl Loc {
-    pub fn new(line: usize, col: usize, length: usize) -> Self {
-        Self { line, col, length }
+    pub fn new(line: usize, col: usize) -> Self {
+        Self { line, col }
     }
 
-    pub fn get_line(src: &ProgramSrc, line: usize) -> &str {
-        // check that line is a valid line
+    fn get_line(src: &ProgramSrc, line: usize) -> Option<&str> {
+        if line == 0 {
+            return None;
+        }
         let line_nums = src.get_line_nums();
-        let first = *line_nums.get(line).unwrap(); // error message
-        let last = *line_nums.get(line + 1).unwrap() - 1; // check that last is valid
-        &src.src[first..last]
+        let first = *line_nums.get(line)?;
+        let last = *line_nums.get(line + 1)?;
+        Some(&src.src[first..last - 1]) // remove final newline
     }
 
-    pub fn format(&self, src: &ProgramSrc) -> String {
+    pub fn format(&self, src: &ProgramSrc, message: &str) -> String {
         let prev = Self::get_line(src, self.line - 1);
         let this = Self::get_line(src, self.line);
         let next = Self::get_line(src, self.line + 1);
 
-        let prev_fmt = format!("{} | {}", self.line - 1, prev);
-        let this_fmt = format!("{} | {}", self.line, this);
-        let next_fmt = format!("{} | {}", self.line + 1, next);
+        let prev_fmt = prev
+            .map(|prev| format!("{} | {}", self.line - 1, prev))
+            .unwrap_or_default();
+        let this_fmt = this
+            .map(|this| format!("{} | {}", self.line, this))
+            .unwrap_or_default();
+        let next_fmt = next
+            .map(|next| format!("{} | {}", self.line + 1, next))
+            .unwrap_or_default();
 
-        let underline = format!("{}{}", " ".repeat(self.col), "^".repeat(self.length));
-        debug_assert!(this.len() >= self.col + self.length);
-        
+        let underline = format!("{}^ {}", " ".repeat(self.col), message);
+
         format!("{prev_fmt}\n{this_fmt}\n  | {underline}\n{next_fmt}")
     }
 }

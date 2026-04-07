@@ -1,9 +1,22 @@
 use std::fs;
 use std::io::stdout;
 
-use ferric::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+use ferric::{
+    interpreter::Interpreter,
+    lexer::Lexer,
+    loc::{Loc, ProgramSrc},
+    parser::Parser,
+};
 
 fn ferric_main(source: &str) {
+    let s = ProgramSrc::new(source.to_owned());
+
+    let loc = Loc::new(3, 0, 3);
+
+    println!("{}", loc.format(&s));
+
+    return;
+
     let lexer = Lexer::new(source.bytes());
 
     let mut parser = Parser::new(lexer);

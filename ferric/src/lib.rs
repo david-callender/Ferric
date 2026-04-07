@@ -2,6 +2,7 @@ pub mod interpreter;
 pub mod lexer;
 mod macros;
 pub mod parser;
+pub mod loc;
 
 #[cfg(test)]
 mod tests {

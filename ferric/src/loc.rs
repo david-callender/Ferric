@@ -1,3 +1,4 @@
+#[must_use]
 fn num_digits(n: usize) -> usize {
     n.checked_ilog10().unwrap_or(0) as usize + 1
 }
@@ -9,6 +10,7 @@ pub struct ProgramSrc {
 }
 
 impl ProgramSrc {
+    #[must_use]
     pub fn new(src: String) -> Self {
         // 1-indexed, so first line is line_nums[1]
         let mut line_nums = vec![0, 0];
@@ -24,6 +26,7 @@ impl ProgramSrc {
         Self { src, line_nums }
     }
 
+    #[must_use]
     fn get_line(&self, line: usize) -> Option<ProgramLine<'_>> {
         if line == 0 {
             return None;
@@ -45,6 +48,7 @@ struct ProgramLine<'a> {
 }
 
 impl ProgramLine<'_> {
+    #[must_use]
     fn display(&self, gutter_size: usize, post_gutter: &str, pre_line: &str) -> String {
         format!(
             "{}{}{post_gutter} | {pre_line}{}",
@@ -62,12 +66,14 @@ pub struct Loc {
 }
 
 impl Loc {
+    #[must_use]
     pub fn new(line: usize, col: usize) -> Self {
         assert_ne!(line, 0, "lines are 1-indexed");
         assert_ne!(col, 0, "columns are 1-indexed");
         Self { line, col }
     }
 
+    #[must_use]
     pub fn format_with_len(&self, src: &ProgramSrc, message: &str, len: usize) -> String {
         let prev = src.get_line(self.line - 1);
         let this = src.get_line(self.line);
@@ -95,6 +101,7 @@ impl Loc {
         format!("{prev_fmt}\n{this_fmt}\n{underline}\n{next_fmt}")
     }
 
+    #[must_use]
     pub fn format(&self, src: &ProgramSrc, message: &str) -> String {
         self.format_with_len(src, message, 1)
     }
@@ -107,11 +114,13 @@ pub struct Span {
 }
 
 impl Span {
+    #[must_use]
     pub fn new(start: Loc, end: Loc) -> Self {
         assert!(end >= start);
         Self { start, end }
     }
 
+    #[must_use]
     pub fn format(&self, src: &ProgramSrc, message: &str) -> String {
         if self.start.line == self.end.line {
             return self
@@ -140,7 +149,7 @@ impl Span {
         );
         let middle_fmt = middle.map(|line| make_line(line, "| ")).collect::<Vec<_>>();
         let end_underline = format!(
-            "{}| |{}^",
+            "{}| |{}^ {message}",
             " ".repeat(num_space + 1),
             "_".repeat(self.end.col)
         );

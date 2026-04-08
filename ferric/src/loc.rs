@@ -1,12 +1,14 @@
+use std::rc::Rc;
+
 #[must_use]
 fn num_digits(n: usize) -> usize {
     n.checked_ilog10().unwrap_or(0) as usize + 1
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProgramSrc {
-    src: String,
-    line_nums: Vec<usize>,
+    src: Rc<str>,
+    line_nums: Rc<[usize]>,
 }
 
 impl ProgramSrc {
@@ -23,7 +25,7 @@ impl ProgramSrc {
 
         line_nums.push(src.len());
 
-        Self { src, line_nums }
+        Self { src: src.into(), line_nums: line_nums.into() }
     }
     
     pub fn stream(&self) -> impl Iterator<Item = u8> {
@@ -53,7 +55,7 @@ struct ProgramLine<'a> {
 
 impl ProgramLine<'_> {
     #[must_use]
-    fn display(&self, gutter_size: usize, post_gutter: &str, pre_line: &str) -> String {
+    fn format(&self, gutter_size: usize, post_gutter: &str, pre_line: &str) -> String {
         format!(
             "{}{}{post_gutter} | {pre_line}{}",
             " ".repeat(gutter_size - num_digits(self.num)),
@@ -86,7 +88,7 @@ impl Loc {
         let gutter_size = num_digits(self.line + 1);
 
         let make_line = |line: Option<ProgramLine<'_>>| {
-            line.map(|line| line.display(gutter_size, "", ""))
+            line.map(|line| line.format(gutter_size, "", ""))
                 .unwrap_or_default()
         };
 
@@ -140,7 +142,7 @@ impl Span {
         let num_space = num_digits(self.end.line + 1);
 
         let make_line = |line: Option<ProgramLine<'_>>, pre_line: &str| {
-            line.map(|line| line.display(num_space, "", pre_line))
+            line.map(|line| line.format(num_space, "", pre_line))
                 .unwrap_or_default()
         };
 

@@ -1,5 +1,33 @@
 use std::{collections::HashMap, iter::Peekable, vec};
 
+use thiserror::Error;
+
+use crate::loc::{Loc, ProgramSrc, Span};
+
+#[derive(Debug, Error)]
+pub enum LexerError {
+    #[error("{}", .1.format(.0, "number literals cannot start with '.'"))]
+    NumLitLeadingDecimal(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, "number literals cannot end with '.'"))]
+    NumLitTrailingDecimal(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, "number literals cannot have multiple decimal separators"))]
+    NumLitMultipleDecimals(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, &format!("this byte ({} or {}) was not expected by the lexer", *.2 as char, .2)))]
+    InvalidByte(ProgramSrc, Loc, u8),
+
+    #[error("{}", .1.format(.0, "this string literal was not valid utf-8"))]
+    StrLitInvalidUtf8(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, "this identifier was not valid utf-8"))]
+    IdentInvalidUtf8(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, &format!("'\\{}' is not a valid escape sequence", *.2 as char)))]
+    InvalidEscapeSequence(ProgramSrc, Span, u8),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Let,          // let

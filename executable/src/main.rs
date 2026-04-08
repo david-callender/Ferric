@@ -3,14 +3,19 @@ use std::io::stdout;
 
 use ferric::{
     interpreter::Interpreter,
-    lexer::Lexer,
+    lexer::{Lexer, LexerError},
     loc::{Loc, ProgramSrc, Span},
     parser::Parser,
 };
 
 fn ferric_main(source: String) {
     let src = ProgramSrc::new(source);
-
+    
+    let err = LexerError::NumLitLeadingDecimal(src.clone(), Span::new(Loc::new(1, 1), Loc::new(1, 5)));
+    
+    eprintln!("{err}");
+    return;
+    
     let lexer = Lexer::new(src.stream());
 
     let mut parser = Parser::new(lexer);

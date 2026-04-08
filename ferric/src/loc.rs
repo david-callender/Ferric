@@ -25,6 +25,10 @@ impl ProgramSrc {
 
         Self { src, line_nums }
     }
+    
+    pub fn stream(&self) -> impl Iterator<Item = u8> {
+        self.src.bytes()
+    }
 
     #[must_use]
     fn get_line(&self, line: usize) -> Option<ProgramLine<'_>> {

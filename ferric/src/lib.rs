@@ -6,10 +6,11 @@ pub mod loc;
 
 #[cfg(test)]
 mod tests {
-    use crate::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+    use crate::{interpreter::Interpreter, lexer::Lexer, loc::ProgramSrc, parser::Parser};
 
     fn harness(src: &str) -> String {
-        let (expr, var_storage_size) = Parser::new(Lexer::new(src.bytes())).parse();
+        let src = ProgramSrc::new(src.to_string());
+        let (expr, var_storage_size) = Parser::new(Lexer::new(src.stream())).parse();
 
         let mut output = vec![];
 

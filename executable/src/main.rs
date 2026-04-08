@@ -8,16 +8,10 @@ use ferric::{
     parser::Parser,
 };
 
-fn ferric_main(source: &str) {
-    let s = ProgramSrc::new(source.to_owned());
+fn ferric_main(source: String) {
+    let src = ProgramSrc::new(source);
 
-    let span = Span::new(Loc::new(8, 1), Loc::new(13, 5));
-
-    println!("{}", span.format(&s, "you did something wrong here"));
-
-    return;
-
-    let lexer = Lexer::new(source.bytes());
+    let lexer = Lexer::new(src.stream());
 
     let mut parser = Parser::new(lexer);
     let (expr, var_storage_size) = parser.parse();
@@ -30,5 +24,5 @@ fn ferric_main(source: &str) {
 
 fn main() {
     let contents = fs::read_to_string("./executable/src.fe").expect("No such file located.");
-    ferric_main(&contents);
+    ferric_main(contents);
 }

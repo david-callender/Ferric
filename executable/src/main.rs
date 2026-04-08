@@ -11,7 +11,7 @@ use ferric::{
 fn ferric_main(source: &str) {
     let s = ProgramSrc::new(source.to_owned());
 
-    let span = Span::new(Loc::new(2, 0), Loc::new(7, 4));
+    let span = Span::new(Loc::new(2, 1), Loc::new(7, 5));
 
     println!("{}", span.format(&s, "you did something wrong here"));
 

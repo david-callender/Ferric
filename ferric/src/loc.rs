@@ -63,7 +63,8 @@ pub struct Loc {
 
 impl Loc {
     pub fn new(line: usize, col: usize) -> Self {
-        assert_ne!(line, 0);
+        assert_ne!(line, 0, "lines are 1-indexed");
+        assert_ne!(col, 0, "columns are 1-indexed");
         Self { line, col }
     }
 
@@ -86,7 +87,7 @@ impl Loc {
         let underline = format!(
             "{}|{}{} {}",
             " ".repeat(gutter_size + 1),
-            " ".repeat(self.col + 1),
+            " ".repeat(self.col),
             "^".repeat(len),
             message
         );
@@ -135,13 +136,13 @@ impl Span {
         let start_underline = format!(
             "{}|  {}^",
             " ".repeat(num_space + 1),
-            "_".repeat(self.start.col + 1)
+            "_".repeat(self.start.col)
         );
         let middle_fmt = middle.map(|line| make_line(line, "| ")).collect::<Vec<_>>();
         let end_underline = format!(
             "{}| |{}^",
             " ".repeat(num_space + 1),
-            "_".repeat(self.end.col + 1)
+            "_".repeat(self.end.col)
         );
         let next_fmt = make_line(next, "  ");
 

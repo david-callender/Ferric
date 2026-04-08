@@ -41,7 +41,8 @@ pub fn ferric(src: &str, output: HtmlPreElement) {
     
     let src = ProgramSrc::new(src.to_string());
 
-    let lexer = Lexer::new(src.stream());
+    let stream = src.clone();
+    let lexer = Lexer::new(stream.stream(), src);
 
     let parser_start = Utc::now();
     let (program, var_storage_size) = Parser::new(lexer).parse();

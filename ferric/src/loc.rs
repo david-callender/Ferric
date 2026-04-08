@@ -131,7 +131,7 @@ impl Span {
         if self.start.line == self.end.line {
             return self
                 .start
-                .format_with_len(src, message, self.end.col - self.start.col);
+                .format_with_len(src, message, self.end.col - self.start.col + 1);
         }
 
         let prev = src.get_line(self.start.line - 1);

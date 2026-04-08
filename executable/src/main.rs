@@ -11,12 +11,12 @@ use ferric::{
 fn ferric_main(source: String) {
     let src = ProgramSrc::new(source);
     
-    let err = LexerError::NumLitLeadingDecimal(src.clone(), Span::new(Loc::new(1, 1), Loc::new(1, 5)));
+    let err = LexerError::NumLitLeadingDecimal(src.clone(), Span::new(Loc::new(1, 1), Loc::new(1, 1)));
     
     eprintln!("{err}");
     return;
     
-    let lexer = Lexer::new(src.stream());
+    let lexer = Lexer::new(src.clone().stream(), src);
 
     let mut parser = Parser::new(lexer);
     let (expr, var_storage_size) = parser.parse();

@@ -10,7 +10,7 @@ mod tests {
 
     fn harness(src: &str) -> String {
         let src = ProgramSrc::new(src.to_string());
-        let (expr, var_storage_size) = Parser::new(Lexer::new(src.stream())).parse();
+        let (expr, var_storage_size) = Parser::new(Lexer::new(src.clone().stream(), src)).parse();
 
         let mut output = vec![];
 

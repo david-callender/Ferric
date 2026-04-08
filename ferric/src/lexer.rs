@@ -139,10 +139,14 @@ fn parse_number(digits: Vec<u8>) -> f64 {
 pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
     keywords: HashMap<&'static str, Token>,
+    src: ProgramSrc,
+    line: usize,
+    col: usize,
 }
 
 impl<I: Iterator<Item = u8>> Lexer<I> {
-    pub fn new(stream: I) -> Self {
+    // TODO: unify into one param
+    pub fn new(stream: I, src: ProgramSrc) -> Self {
         let keywords = HashMap::from([
             ("let", Token::Let),
             ("let", Token::Let),
@@ -158,26 +162,42 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         Self {
             stream: stream.peekable(),
             keywords,
+            src,
+            line: 1,
+            col: 1,
         }
+    }
+
+    fn next(&mut self) -> Option<u8> {
+        let n = self.stream.next();
+        if let Some(n) = n {
+            if n == b'\n' {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
+        }
+        n
     }
 
     fn lex_multi_byte(&mut self, first: u8) -> Token {
         let second = self.stream.peek();
         match (first, second) {
             (b'=', Some(b'=')) => {
-                self.stream.next();
+                self.next();
                 Token::EqEq
             }
             (b'<', Some(b'=')) => {
-                self.stream.next();
+                self.next();
                 Token::LessEq
             }
             (b'>', Some(b'=')) => {
-                self.stream.next();
+                self.next();
                 Token::GreaterEq
             }
             (b'!', Some(b'=')) => {
-                self.stream.next();
+                self.next();
                 Token::BangEq
             }
             (b'=', _) => Token::Eq,
@@ -194,7 +214,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         while let Some(a) = self.stream.peek() {
             if a.is_ascii_digit() || *a == b'.' {
                 num.push(*a);
-                self.stream.next();
+                self.next();
             } else {
                 break;
             }
@@ -208,7 +228,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             && (b.is_ascii_alphanumeric() || *b == b'_')
         {
             ident_bytes.push(*b);
-            self.stream.next();
+            self.next();
         }
         let ident = String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
 
@@ -222,16 +242,13 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
     fn lex_string_lit(&mut self) -> Token {
         let mut st = Vec::new();
         loop {
-            let s = self.stream.next().expect("unterminated string literal");
+            let s = self.next().expect("unterminated string literal");
             if s == b'"' {
                 let st = String::from_utf8(st).expect("invalid UTF-8 in string literal");
                 return Token::StringLit(st);
             }
             if s == b'\\' {
-                let esc = self
-                    .stream
-                    .next()
-                    .expect("expected escape sequence, got none");
+                let esc = self.next().expect("expected escape sequence, got none");
                 match esc {
                     b'n' => st.push(b'\n'),
                     b't' => st.push(b'\t'),
@@ -251,7 +268,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let c = self.stream.next()?;
+            let c = self.next()?;
             if c.is_ascii_whitespace() {
                 continue;
             }
@@ -290,7 +307,8 @@ mod tests {
     use Token as T;
 
     fn collect_tokens(src: &str) -> Vec<Token> {
-        Lexer::new(src.bytes()).collect()
+        let src = ProgramSrc::new(src.to_string());
+        Lexer::new(src.clone().stream(), src).collect()
     }
 
     #[test]

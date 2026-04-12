@@ -1,6 +1,6 @@
 use std::{collections::HashMap, iter::Peekable};
 
-use crate::{interpreter::RuntimeVal, lexer::Token};
+use crate::{interpreter::RuntimeVal, lexer::{Lexeme, Token}};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -63,13 +63,13 @@ pub enum UnaryOp {
     BitNot,
 }
 
-pub struct Parser<I: Iterator<Item = Token>> {
+pub struct Parser<I: Iterator<Item = Lexeme>> {
     stream: Peekable<I>,
     next_index: usize,
     env: Vec<HashMap<String, usize>>,
 }
 
-impl<I: Iterator<Item = Token>> Parser<I> {
+impl<I: Iterator<Item = Lexeme>> Parser<I> {
     pub fn new<II: IntoIterator<IntoIter = I>>(stream: II) -> Self {
         Self {
             stream: stream.into_iter().peekable(),
@@ -79,7 +79,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn matches(&mut self, expected: Token) -> bool {
-        if self.stream.peek() == Some(&expected) {
+        if self.stream.peek().map(|lx| &lx.t) == Some(&expected) {
             let _ = self.stream.next().unwrap();
             drop(expected);
             true
@@ -89,22 +89,22 @@ impl<I: Iterator<Item = Token>> Parser<I> {
     }
 
     fn is_one_of<const N: usize>(&mut self, expected: [Token; N]) -> Option<Token> {
-        if self.stream.peek().is_some_and(|tok| expected.contains(tok)) {
-            return Some(self.stream.next().unwrap());
+        if self.stream.peek().is_some_and(|tok| expected.contains(&tok.t)) {
+            return Some(self.stream.next().unwrap().t);
         }
         drop(expected);
         None
     }
 
     fn consume(&mut self, expected: Token, message: &str) -> Token {
-        let token = self.stream.next().expect("expected token, got none");
+        let token = self.stream.next().expect("expected token, got none").t;
         assert_eq!(token, expected, "{message}");
         drop(expected);
         token
     }
 
     fn consume_ident(&mut self, message: &str) -> String {
-        let Some(Token::Ident(name)) = self.stream.next() else {
+        let Some(Lexeme { t: Token::Ident(name), span: _ }) = self.stream.next() else {
             panic!("{message}");
         };
         name
@@ -268,7 +268,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 
     fn parse_basic(&mut self) -> Expr {
         let token = self.stream.next().expect("expected basic token, got none");
-        match token {
+        match token.t {
             Token::OpenParen => self.parse_paren(),
             Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
@@ -282,7 +282,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
             Token::If => self.parse_if(),
             Token::OpenBracket => self.parse_block(),
             Token::While => self.parse_while(),
-            _ => panic!("expected basic token, got non-basic token {token}"),
+            _ => panic!("expected basic token, got non-basic token {}", token.t),
         }
     }
 
@@ -374,7 +374,7 @@ impl<I: Iterator<Item = Token>> Parser<I> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{expr, one_token, tokens};
+    use crate::{expr, one_token, tokens, loc::{Loc, Span}};
 
     use super::*;
 

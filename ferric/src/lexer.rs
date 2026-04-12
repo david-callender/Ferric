@@ -64,6 +64,18 @@ pub enum Token {
     Ident(String),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lexeme {
+    pub t: Token,
+    pub span: Span,
+}
+
+impl Lexeme {
+    pub fn new(t: Token, span: Span) -> Self {
+        Self { t, span }
+    }
+}
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -168,87 +180,99 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         }
     }
 
-    fn next(&mut self) -> Option<u8> {
-        let n = self.stream.next();
-        if let Some(n) = n {
-            if n == b'\n' {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
-            }
-        }
-        n
+    fn loc(&self) -> Loc {
+        Loc::new(self.line, self.col)
     }
 
-    fn lex_multi_byte(&mut self, first: u8) -> Token {
+    fn next(&mut self) -> Option<(u8, Loc)> {
+        let n = self.stream.next()?;
+        let this = self.loc();
+        if n == b'\n' {
+            self.line += 1;
+            self.col = 1;
+        } else {
+            self.col += 1;
+        }
+        Some((n, this))
+    }
+
+    fn lex_multi_byte(&mut self, first: u8, loc: Loc) -> Lexeme {
         let second = self.stream.peek();
         match (first, second) {
             (b'=', Some(b'=')) => {
-                self.next();
-                Token::EqEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::EqEq, loc + snd)
             }
             (b'<', Some(b'=')) => {
-                self.next();
-                Token::LessEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::LessEq, loc + snd)
             }
             (b'>', Some(b'=')) => {
-                self.next();
-                Token::GreaterEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::GreaterEq, loc + snd)
             }
             (b'!', Some(b'=')) => {
-                self.next();
-                Token::BangEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::BangEq, loc + snd)
             }
-            (b'=', _) => Token::Eq,
-            (b'<', _) => Token::Less,
-            (b'>', _) => Token::Greater,
-            (b'!', _) => Token::Bang,
+            (b'=', _) => Lexeme::new(Token::Eq, loc.into()),
+            (b'<', _) => Lexeme::new(Token::Less, loc.into()),
+            (b'>', _) => Lexeme::new(Token::Greater, loc.into()),
+            (b'!', _) => Lexeme::new(Token::Bang, loc.into()),
             _ => panic!("Invalid byte {}", first as char),
         }
     }
 
-    fn lex_number_lit(&mut self, first: u8) -> Token {
+    fn lex_number_lit(&mut self, first: u8, first_loc: Loc) -> Lexeme {
         let mut num = Vec::new();
         num.push(first);
+        let mut span: Span = first_loc.into();
         while let Some(a) = self.stream.peek() {
             if a.is_ascii_digit() || *a == b'.' {
                 num.push(*a);
-                self.next();
+                let (_, loc) = self.next().unwrap();
+                span = span + loc;
             } else {
                 break;
             }
         }
-        Token::NumLit(parse_number(num))
+        Lexeme::new(Token::NumLit(parse_number(num)), span)
     }
 
-    fn lex_ident(&mut self, first: u8) -> Token {
+    fn lex_ident(&mut self, first: u8, first_loc: Loc) -> Lexeme {
         let mut ident_bytes = vec![first];
+        let mut span:Span = first_loc.into();
         while let Some(b) = self.stream.peek()
             && (b.is_ascii_alphanumeric() || *b == b'_')
         {
             ident_bytes.push(*b);
-            self.next();
+            let (_, loc) = self.next().unwrap();
+            span = span + loc;
         }
         let ident = String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
 
-        if let Some(keyword) = self.keywords.get(ident.as_str()) {
+        let tok = if let Some(keyword) = self.keywords.get(ident.as_str()) {
             keyword.clone()
         } else {
             Token::Ident(ident)
-        }
+        };
+        
+        Lexeme::new(tok, span)
     }
 
-    fn lex_string_lit(&mut self) -> Token {
+    fn lex_string_lit(&mut self, first: Loc) -> Lexeme {
         let mut st = Vec::new();
+        let mut span: Span = first.into();
         loop {
-            let s = self.next().expect("unterminated string literal");
+            let (s, loc) = self.next().expect("unterminated string literal");
+            span = span + loc;
             if s == b'"' {
                 let st = String::from_utf8(st).expect("invalid UTF-8 in string literal");
-                return Token::StringLit(st);
+                return Lexeme::new(Token::StringLit(st), span);
             }
             if s == b'\\' {
-                let esc = self.next().expect("expected escape sequence, got none");
+                let (esc, loc) = self.next().expect("expected escape sequence, got none");
+                span = span + loc;
                 match esc {
                     b'n' => st.push(b'\n'),
                     b't' => st.push(b'\t'),
@@ -265,33 +289,33 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
 }
 
 impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
-    type Item = Token;
+    type Item = Lexeme;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let c = self.next()?;
+            let (c, loc) = self.next()?;
             if c.is_ascii_whitespace() {
                 continue;
             }
 
             let tok = match c {
-                b'(' => Token::OpenParen,
-                b')' => Token::CloseParen,
-                b'{' => Token::OpenBracket,
-                b'}' => Token::CloseBracket,
-                b';' => Token::Semi,
-                b',' => Token::Comma,
-                b'+' => Token::Plus,
-                b'-' => Token::Minus,
-                b'*' => Token::Star,
-                b'/' => Token::Slash,
-                b'%' => Token::Percent,
-                b'~' => Token::Tilde,
+                b'(' => Lexeme::new(Token::OpenParen, loc.into()),
+                b')' => Lexeme::new(Token::CloseParen, loc.into()),
+                b'{' => Lexeme::new(Token::OpenBracket, loc.into()),
+                b'}' => Lexeme::new(Token::CloseBracket, loc.into()),
+                b';' => Lexeme::new(Token::Semi, loc.into()),
+                b',' => Lexeme::new(Token::Comma, loc.into()),
+                b'+' => Lexeme::new(Token::Plus, loc.into()),
+                b'-' => Lexeme::new(Token::Minus, loc.into()),
+                b'*' => Lexeme::new(Token::Star, loc.into()),
+                b'/' => Lexeme::new(Token::Slash, loc.into()),
+                b'%' => Lexeme::new(Token::Percent, loc.into()),
+                b'~' => Lexeme::new(Token::Tilde, loc.into()),
 
-                b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c),
+                b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c, loc),
 
-                x if x.is_ascii_digit() => self.lex_number_lit(x),
-                x if x.is_ascii_alphabetic() || x == b'_' => self.lex_ident(x),
-                b'"' => self.lex_string_lit(),
+                x if x.is_ascii_digit() => self.lex_number_lit(x, loc),
+                x if x.is_ascii_alphabetic() || x == b'_' => self.lex_ident(x, loc),
+                b'"' => self.lex_string_lit(loc),
 
                 b => panic!("Invalid byte {}", b as char),
             };
@@ -308,7 +332,7 @@ mod tests {
 
     fn collect_tokens(src: &str) -> Vec<Token> {
         let src = ProgramSrc::new(src.to_string());
-        Lexer::new(src.clone().stream(), src).collect()
+        Lexer::new(src.clone().stream(), src).map(|lx| lx.t).collect()
     }
 
     #[test]

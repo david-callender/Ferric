@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{ops::Add, rc::Rc};
 
 #[must_use]
 fn num_digits(n: usize) -> usize {
@@ -23,11 +23,14 @@ impl ProgramSrc {
             }
         }
 
-        line_nums.push(src.len());
+        line_nums.push(src.len() + 1);
 
-        Self { src: src.into(), line_nums: line_nums.into() }
+        Self {
+            src: src.into(),
+            line_nums: line_nums.into(),
+        }
     }
-    
+
     pub fn stream(&self) -> impl Iterator<Item = u8> {
         self.src.bytes()
     }
@@ -165,5 +168,54 @@ impl Span {
             "{prev_fmt}\n{start_fmt}\n{start_underline}\n{}\n{end_underline}\n{next_fmt}",
             middle_fmt.join("\n")
         )
+    }
+}
+
+impl From<Loc> for Span {
+    fn from(value: Loc) -> Self {
+        Span {
+            start: value.clone(),
+            end: value,
+        }
+    }
+}
+
+impl Add<Span> for Span {
+    type Output = Span;
+    fn add(self, rhs: Span) -> Self::Output {
+        let locs = [self.start, self.end, rhs.start, rhs.end];
+        let min = locs.iter().min().unwrap();
+        let max = locs.iter().max().unwrap();
+        Self::new(min.clone(), max.clone())
+    }
+}
+
+impl Add<Loc> for Span {
+    type Output = Span;
+    fn add(self, rhs: Loc) -> Self::Output {
+        let locs = [self.start, self.end, rhs];
+        let min = locs.iter().min().unwrap();
+        let max = locs.iter().max().unwrap();
+        Self::new(min.clone(), max.clone())
+    }
+}
+
+impl Add<Span> for Loc {
+    type Output = Span;
+    fn add(self, rhs: Span) -> Self::Output {
+        let locs = [self, rhs.start, rhs.end];
+        let min = locs.iter().min().unwrap();
+        let max = locs.iter().max().unwrap();
+        Span::new(min.clone(), max.clone())
+    }
+}
+
+impl Add<Loc> for Loc {
+    type Output = Span;
+    fn add(self, rhs: Loc) -> Self::Output {
+        let locs = [self, rhs];
+        let min = locs.iter().min().unwrap();
+        let max = locs.iter().max().unwrap();
+        Span::new(min.clone(), max.clone())
     }
 }

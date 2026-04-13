@@ -13,6 +13,9 @@ pub enum ParserError {
     LexerError(#[from] LexerError),
 }
 
+// Module error type
+type Res<T> = Result<T, ParserError>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(RuntimeVal),
@@ -89,11 +92,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn next(&mut self) -> Result<Option<Lexeme>, ParserError> {
+    fn next(&mut self) -> Res<Option<Lexeme>> {
         Ok(self.stream.next().transpose()?)
     }
 
-    fn peek(&mut self) -> Result<Option<&Lexeme>, ParserError> {
+    fn peek(&mut self) -> Res<Option<&Lexeme>> {
         let peeked = self.stream.peek();
         match peeked {
             Some(Ok(lexeme)) => Ok(Some(lexeme)),
@@ -102,7 +105,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn matches(&mut self, expected: Token) -> Result<bool, ParserError> {
+    fn matches(&mut self, expected: Token) -> Res<bool> {
         if self.peek()?.is_some_and(|x| x.t == expected) {
             let _ = self.next()?.unwrap();
             Ok(true)
@@ -123,14 +126,14 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         None
     }
 
-    fn consume(&mut self, expected: Token, message: &str) -> Result<Token, ParserError> {
+    fn consume(&mut self, expected: Token, message: &str) -> Res<Token> {
         let token = self.next()?.expect("expected token, got none").t;
         assert_eq!(token, expected, "{message}");
         drop(expected);
         Ok(token)
     }
 
-    fn consume_ident(&mut self, message: &str) -> Result<String, ParserError> {
+    fn consume_ident(&mut self, message: &str) -> Res<String> {
         let Some(Lexeme {
             t: Token::Ident(name),
             span: _,
@@ -141,7 +144,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(name)
     }
 
-    pub fn parse(&mut self) -> Result<(Vec<Expr>, usize), ParserError> {
+    pub fn parse(&mut self) -> Res<(Vec<Expr>, usize)> {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
             exprs.push(self.parse_expr()?);
@@ -150,11 +153,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok((exprs, self.next_index))
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, ParserError> {
+    fn parse_expr(&mut self) -> Res<Expr> {
         self.parse_var_set()
     }
 
-    fn parse_var_set(&mut self) -> Result<Expr, ParserError> {
+    fn parse_var_set(&mut self) -> Res<Expr> {
         let left = self.parse_comparisons()?;
 
         if self.matches(Token::Eq)? {
@@ -172,7 +175,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(left)
     }
 
-    fn parse_comparisons(&mut self) -> Result<Expr, ParserError> {
+    fn parse_comparisons(&mut self) -> Res<Expr> {
         let left = self.parse_add_subtract()?;
         let operation = match self.is_one_of([
             Token::Greater,
@@ -199,7 +202,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn parse_add_subtract(&mut self) -> Result<Expr, ParserError> {
+    fn parse_add_subtract(&mut self) -> Res<Expr> {
         let left = self.parse_mult_div_mod()?;
 
         if self.matches(Token::Plus)? {
@@ -220,7 +223,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(left)
     }
 
-    fn parse_mult_div_mod(&mut self) -> Result<Expr, ParserError> {
+    fn parse_mult_div_mod(&mut self) -> Res<Expr> {
         let left = self.parse_unary_op()?;
         let operation = match self.is_one_of([Token::Star, Token::Slash, Token::Percent]) {
             Some(Token::Star) => BinaryOp::Multiply,
@@ -237,7 +240,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn parse_unary_op(&mut self) -> Result<Expr, ParserError> {
+    fn parse_unary_op(&mut self) -> Res<Expr> {
         if self.matches(Token::Minus)? {
             let right = self.parse_func_call()?;
             return Ok(Expr::Unary {
@@ -257,7 +260,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     // consume_args also consumes the closing paren of the
     // arguments list, but assumes that the opening paren has
     // already been parsed.
-    fn consume_args(&mut self) -> Result<Vec<Expr>, ParserError> {
+    fn consume_args(&mut self) -> Res<Vec<Expr>> {
         let mut args_vec = vec![];
 
         if !self.matches(Token::CloseParen)? {
@@ -274,7 +277,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(args_vec)
     }
 
-    fn parse_func_call(&mut self) -> Result<Expr, ParserError> {
+    fn parse_func_call(&mut self) -> Res<Expr> {
         let mut func_call = self.parse_basic()?;
 
         while self.matches(Token::OpenParen)? {
@@ -297,7 +300,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         None
     }
 
-    fn parse_basic(&mut self) -> Result<Expr, ParserError> {
+    fn parse_basic(&mut self) -> Res<Expr> {
         let token = self.next()?.expect("expected basic token, got none");
         let expr = match token.t {
             Token::OpenParen => self.parse_paren()?,
@@ -321,13 +324,13 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     // parse_paren assumes that the initial OpenParen token has already
     // been consumed.
-    fn parse_paren(&mut self) -> Result<Expr, ParserError> {
+    fn parse_paren(&mut self) -> Res<Expr> {
         let inner_expr = self.parse_expr()?;
         self.consume(Token::CloseParen, "unclosed paren block")?;
         Ok(inner_expr)
     }
 
-    fn parse_decl(&mut self) -> Result<Expr, ParserError> {
+    fn parse_decl(&mut self) -> Res<Expr> {
         let name = self.consume_ident("Expected variable name after let")?;
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
@@ -343,7 +346,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_if(&mut self) -> Result<Expr, ParserError> {
+    fn parse_if(&mut self) -> Res<Expr> {
         let cond = self.parse_expr()?;
         self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
@@ -370,7 +373,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn parse_while(&mut self) -> Result<Expr, ParserError> {
+    fn parse_while(&mut self) -> Res<Expr> {
         let cond = Box::new(self.parse_expr()?);
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
         let body = Box::new(self.parse_block()?);
@@ -378,7 +381,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     // assumes the leading Token::OpenBracket has already been consumed.
-    fn parse_block(&mut self) -> Result<Expr, ParserError> {
+    fn parse_block(&mut self) -> Res<Expr> {
         if self.matches(Token::CloseBracket)? {
             return Ok(Expr::Block(vec![]));
         }

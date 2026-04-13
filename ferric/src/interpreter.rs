@@ -10,6 +10,9 @@ use std::time::Duration;
 #[derive(Debug, Error, Clone)]
 pub enum RuntimeError {}
 
+// Module error type
+type Res<T> = Result<T, RuntimeError>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
     Number(f64),
@@ -46,11 +49,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn operation_add(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_add(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 + n2),
             (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
@@ -61,11 +60,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         })
     }
 
-    fn operation_multiply(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_multiply(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 * n2),
             (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
@@ -79,51 +74,35 @@ impl<'a, W: Write> Interpreter<'a, W> {
         })
     }
 
-    fn operation_subtract(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_subtract(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 - n2),
             _ => panic!("You can't subtract those, idiot!"), // TODO: Update error messages
         })
     }
 
-    fn operation_divide(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_divide(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 / n2),
             _ => panic!("You can't divide those, idiot!"), // TODO: Update error messages
         })
     }
 
-    fn operation_modulo(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_modulo(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 % n2),
             _ => panic!("Cannot take modulo of non-numbers"),
         })
     }
 
-    fn unary_num_negate(&self, right: RuntimeVal) -> Result<RuntimeVal, RuntimeError> {
+    fn unary_num_negate(&self, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match right {
             RuntimeVal::Number(n) => RuntimeVal::Number(-n),
             _ => panic!("You can't not not negate that!"), // TODO : Update error messages
         })
     }
 
-    fn operation_equal(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_equal(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 == n2),
             (RuntimeVal::String(s1), RuntimeVal::String(s2)) => RuntimeVal::Boolean(s1 == s2),
@@ -132,11 +111,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
         })
     }
-    fn operation_neq(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_neq(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 != n2),
             (RuntimeVal::String(s1), RuntimeVal::String(s2)) => RuntimeVal::Boolean(s1 != s2),
@@ -145,11 +120,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
         })
     }
-    fn operation_greater_than(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_greater_than(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 > n2),
             (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
@@ -158,11 +129,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
         })
     }
-    fn operation_less_than(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_less_than(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 < n2),
             (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
@@ -171,11 +138,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
         })
     }
-    fn operation_geq(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_geq(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 >= n2),
             (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
@@ -184,11 +147,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
         })
     }
-    fn operation_leq(
-        &self,
-        left: RuntimeVal,
-        right: RuntimeVal,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn operation_leq(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 <= n2),
             (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
@@ -198,11 +157,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         })
     }
 
-    fn call_function(
-        &mut self,
-        func_name: RuntimeVal,
-        args: Vec<RuntimeVal>,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn call_function(&mut self, func_name: RuntimeVal, args: Vec<RuntimeVal>) -> Res<RuntimeVal> {
         Ok(match func_name {
             RuntimeVal::Function(fn_name) => match fn_name.as_str() {
                 "print" => builtin_print(self, args),
@@ -217,7 +172,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         })
     }
 
-    fn unary_bit_not(&self, right: RuntimeVal) -> Result<RuntimeVal, RuntimeError> {
+    fn unary_bit_not(&self, right: RuntimeVal) -> Res<RuntimeVal> {
         Ok(match right {
             RuntimeVal::Number(n) => {
                 assert!(n.fract() == 0.0, "You can't bang a float!"); // TODO : Update Error messages
@@ -228,7 +183,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
     }
 
     // evalute -> condense tree -> runTimeVal
-    fn evaluate(&mut self, expr: &Expr) -> Result<RuntimeVal, RuntimeError> {
+    fn evaluate(&mut self, expr: &Expr) -> Res<RuntimeVal> {
         Ok(match expr {
             Expr::Literal(runtime_val) => runtime_val.clone(),
             Expr::Binary {
@@ -264,7 +219,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 let args = args
                     .iter()
                     .map(|expr| self.evaluate(expr))
-                    .collect::<Result<Vec<RuntimeVal>, RuntimeError>>()?;
+                    .collect::<Res<Vec<RuntimeVal>>>()?;
 
                 self.call_function(func_caller, args)?
             }
@@ -336,7 +291,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         })
     }
 
-    pub fn interpret(&mut self, expressions: &Vec<Expr>) -> Result<(), RuntimeError> {
+    pub fn interpret(&mut self, expressions: &Vec<Expr>) -> Res<()> {
         for exp in expressions {
             self.evaluate(exp)?;
         }

@@ -1,6 +1,17 @@
 use std::{collections::HashMap, iter::Peekable};
 
-use crate::{interpreter::RuntimeVal, lexer::{Lexeme, Token}};
+use thiserror::Error;
+
+use crate::{
+    interpreter::RuntimeVal,
+    lexer::{Lexeme, LexerError, Token},
+};
+
+#[derive(Debug, Error)]
+pub enum ParserError {
+    #[error(transparent)]
+    LexerError(#[from] LexerError),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -63,13 +74,13 @@ pub enum UnaryOp {
     BitNot,
 }
 
-pub struct Parser<I: Iterator<Item = Lexeme>> {
+pub struct Parser<I: Iterator<Item = Result<Lexeme, LexerError>>> {
     stream: Peekable<I>,
     next_index: usize,
     env: Vec<HashMap<String, usize>>,
 }
 
-impl<I: Iterator<Item = Lexeme>> Parser<I> {
+impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     pub fn new<II: IntoIterator<IntoIter = I>>(stream: II) -> Self {
         Self {
             stream: stream.into_iter().peekable(),
@@ -79,9 +90,12 @@ impl<I: Iterator<Item = Lexeme>> Parser<I> {
     }
 
     fn matches(&mut self, expected: Token) -> bool {
-        if self.stream.peek().map(|lx| &lx.t) == Some(&expected) {
+        if self
+            .stream
+            .peek()
+            .is_some_and(|x| x.as_ref().is_ok_and(|x| x.t == expected))
+        {
             let _ = self.stream.next().unwrap();
-            drop(expected);
             true
         } else {
             false
@@ -89,8 +103,12 @@ impl<I: Iterator<Item = Lexeme>> Parser<I> {
     }
 
     fn is_one_of<const N: usize>(&mut self, expected: [Token; N]) -> Option<Token> {
-        if self.stream.peek().is_some_and(|tok| expected.contains(&tok.t)) {
-            return Some(self.stream.next().unwrap().t);
+        if self
+            .stream
+            .peek()
+            .is_some_and(|x| x.as_ref().is_ok_and(|x| expected.contains(&x.t)))
+        {
+            return Some(self.stream.next().unwrap().unwrap().t);
         }
         drop(expected);
         None
@@ -104,7 +122,11 @@ impl<I: Iterator<Item = Lexeme>> Parser<I> {
     }
 
     fn consume_ident(&mut self, message: &str) -> String {
-        let Some(Lexeme { t: Token::Ident(name), span: _ }) = self.stream.next() else {
+        let Some(Lexeme {
+            t: Token::Ident(name),
+            span: _,
+        }) = self.stream.next()
+        else {
             panic!("{message}");
         };
         name
@@ -374,7 +396,11 @@ impl<I: Iterator<Item = Lexeme>> Parser<I> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{expr, one_token, tokens, loc::{Loc, Span}};
+    use crate::{
+        expr,
+        loc::{Loc, Span},
+        one_token, tokens,
+    };
 
     use super::*;
 

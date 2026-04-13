@@ -2,13 +2,10 @@ use std::fs;
 use std::io::stdout;
 
 use ferric::{
-    interpreter::Interpreter,
-    lexer::Lexer,
-    loc::ProgramSrc,
-    parser::{Parser, ParserError},
+    FerricError, interpreter::Interpreter, lexer::Lexer, loc::ProgramSrc, parser::Parser,
 };
 
-fn ferric_main(source: String) -> Result<(), ParserError> {
+fn ferric_main(source: String) -> Result<(), FerricError> {
     let src = ProgramSrc::new(source);
 
     let stream = src.clone();
@@ -20,7 +17,7 @@ fn ferric_main(source: String) -> Result<(), ParserError> {
     let mut output = stdout();
 
     let mut interpreter = Interpreter::new(&mut output, var_storage_size);
-    interpreter.interpret(&expr);
+    interpreter.interpret(&expr)?;
 
     Ok(())
 }

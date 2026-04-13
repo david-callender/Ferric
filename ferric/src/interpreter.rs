@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::{fmt::Display, io::Write};
 
 use chrono::{DateTime, Utc};
@@ -20,11 +21,20 @@ pub enum RuntimeError {
 type Res<T> = Result<T, RuntimeError>;
 
 #[derive(Debug, Clone, PartialEq)]
+enum Function {
+    BuiltIn(String),
+    Custom {
+        args: Rc<str>,
+        body: Rc<[Expr]>,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
     Number(f64),
     String(String),
     Boolean(bool),
-    Function(String),
+    Function(Function),
     Null,
 }
 
@@ -34,7 +44,7 @@ impl Display for RuntimeVal {
             Self::Number(n) => write!(f, "{n}"),
             Self::String(s) => write!(f, "{s}"),
             Self::Boolean(b) => write!(f, "{b}"),
-            Self::Function(n) => write!(f, "{n}"),
+            Self::Function(n) => write!(f, "function"),
             Self::Null => write!(f, "Null"),
         }
     }
@@ -122,7 +132,7 @@ fn operation_neq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
 fn operation_greater_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 > n2)),
-        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 > s2)),
         _ => Err(RuntimeError::BinaryTypeMismatch),
     }
 }
@@ -168,7 +178,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
     fn call_function(&mut self, func_name: RuntimeVal, args: Vec<RuntimeVal>) -> Res<RuntimeVal> {
         Ok(match func_name {
-            RuntimeVal::Function(fn_name) => match fn_name.as_str() {
+            RuntimeVal::Function(Function::BuiltIn(fn_name)) => match fn_name.as_str() {
                 "print" => builtin_print(self, args),
                 "substr" => builtin_substr(self, args),
                 "len" => builtin_len(self, args),
@@ -224,7 +234,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
             }
             Expr::Ident(name) => {
                 // check if function exists
-                RuntimeVal::Function(name.clone())
+                RuntimeVal::Function(Function::BuiltIn(name.clone()))
             }
             Expr::Decl { value, slot } => {
                 let val = self.evaluate(value)?;
@@ -287,6 +297,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 RuntimeVal::Null // temp, TODO: handle .collect()
             }
+            Expr::Func { body, params } => todo!()
         })
     }
 

@@ -38,7 +38,7 @@ pub fn init(output: HtmlPreElement) {
 pub fn ferric(src: &str, output: HtmlPreElement) {
     output.set_text_content(Some(""));
     let mut output = JsWriter { output };
-    
+
     let src = ProgramSrc::new(src.to_string());
 
     let stream = src.clone();

@@ -315,7 +315,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::While => self.parse_while()?,
             _ => panic!("expected basic token, got non-basic token {}", token.t),
         };
-        
+
         Ok(expr)
     }
 

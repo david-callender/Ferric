@@ -8,7 +8,13 @@ use std::thread;
 use std::time::Duration;
 
 #[derive(Debug, Error, Clone)]
-pub enum RuntimeError {}
+pub enum RuntimeError {
+    #[error("binary type mismatch")]
+    BinaryTypeMismatch,
+
+    #[error("unary type mismatch")]
+    UnaryTypeMismatch,
+}
 
 // Module error type
 type Res<T> = Result<T, RuntimeError>;
@@ -34,6 +40,117 @@ impl Display for RuntimeVal {
     }
 }
 
+fn operation_add(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 + n2)),
+        (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
+            s1.push_str(&s2);
+            Ok(RuntimeVal::String(s1))
+        }
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_multiply(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 * n2)),
+        (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
+            assert!(n.fract() != 0.0, "You can't multiply a string by a float!");
+
+            s1 = s1.repeat(n as usize);
+
+            Ok(RuntimeVal::String(s1))
+        }
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_subtract(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 - n2)),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_divide(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 / n2)),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_modulo(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 % n2)),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
+    match right {
+        RuntimeVal::Number(n) => Ok(RuntimeVal::Number(-n)),
+        _ => Err(RuntimeError::UnaryTypeMismatch),
+    }
+}
+
+fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
+    match right {
+        RuntimeVal::Number(n) => {
+            assert!(n.fract() == 0.0, "You can't bang a float!"); // TODO : Update Error messages
+            Ok(RuntimeVal::Number(!(n as i64) as f64))
+        }
+        _ => Err(RuntimeError::UnaryTypeMismatch),
+    }
+}
+
+fn operation_equal(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 == n2)),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 == s2)),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_neq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 != n2)),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 != s2)),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_greater_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 > n2)),
+        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_less_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 < n2)),
+        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_geq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 >= n2)),
+        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
+fn operation_leq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
+    match (left, right) {
+        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 <= n2)),
+        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        _ => Err(RuntimeError::BinaryTypeMismatch),
+    }
+}
+
 pub struct Interpreter<'a, W: Write> {
     output: &'a mut W,
     var_storage: Vec<RuntimeVal>,
@@ -47,114 +164,6 @@ impl<'a, W: Write> Interpreter<'a, W> {
             var_storage: vec![RuntimeVal::Null; var_storage_size],
             start_time: Utc::now(),
         }
-    }
-
-    fn operation_add(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 + n2),
-            (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
-                s1.push_str(&s2);
-                RuntimeVal::String(s1)
-            }
-            _ => panic!("You can't add those, idiot!"), // TODO: Update error messages
-        })
-    }
-
-    fn operation_multiply(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 * n2),
-            (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
-                assert!(n.fract() != 0.0, "You can't multiply a string by a float!");
-
-                s1 = s1.repeat(n as usize);
-
-                RuntimeVal::String(s1)
-            }
-            _ => panic!("You can't multiply those, idiot!"), // TODO: Update error messages
-        })
-    }
-
-    fn operation_subtract(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 - n2),
-            _ => panic!("You can't subtract those, idiot!"), // TODO: Update error messages
-        })
-    }
-
-    fn operation_divide(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 / n2),
-            _ => panic!("You can't divide those, idiot!"), // TODO: Update error messages
-        })
-    }
-
-    fn operation_modulo(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Number(n1 % n2),
-            _ => panic!("Cannot take modulo of non-numbers"),
-        })
-    }
-
-    fn unary_num_negate(&self, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match right {
-            RuntimeVal::Number(n) => RuntimeVal::Number(-n),
-            _ => panic!("You can't not not negate that!"), // TODO : Update error messages
-        })
-    }
-
-    fn operation_equal(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 == n2),
-            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => RuntimeVal::Boolean(s1 == s2),
-            _ => {
-                panic!("Tried to compare non-numbers!")
-            }
-        })
-    }
-    fn operation_neq(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 != n2),
-            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => RuntimeVal::Boolean(s1 != s2),
-            _ => {
-                panic!("Tried to compare non-numbers!")
-            }
-        })
-    }
-    fn operation_greater_than(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 > n2),
-            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
-            _ => {
-                panic!("Tried to compare non-numbers!")
-            }
-        })
-    }
-    fn operation_less_than(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 < n2),
-            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
-            _ => {
-                panic!("Tried to compare non-numbers!")
-            }
-        })
-    }
-    fn operation_geq(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 >= n2),
-            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
-            _ => {
-                panic!("Tried to compare non-numbers!")
-            }
-        })
-    }
-    fn operation_leq(&self, left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match (left, right) {
-            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => RuntimeVal::Boolean(n1 <= n2),
-            (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
-            _ => {
-                panic!("Tried to compare non-numbers!")
-            }
-        })
     }
 
     fn call_function(&mut self, func_name: RuntimeVal, args: Vec<RuntimeVal>) -> Res<RuntimeVal> {
@@ -172,16 +181,6 @@ impl<'a, W: Write> Interpreter<'a, W> {
         })
     }
 
-    fn unary_bit_not(&self, right: RuntimeVal) -> Res<RuntimeVal> {
-        Ok(match right {
-            RuntimeVal::Number(n) => {
-                assert!(n.fract() == 0.0, "You can't bang a float!"); // TODO : Update Error messages
-                RuntimeVal::Number(!(n as i64) as f64)
-            }
-            _ => panic!("You can't not not negate that (number)!"), // TODO : Update error messages
-        })
-    }
-
     // evalute -> condense tree -> runTimeVal
     fn evaluate(&mut self, expr: &Expr) -> Res<RuntimeVal> {
         Ok(match expr {
@@ -194,24 +193,24 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
                 match operation {
-                    BinaryOp::Add => self.operation_add(left_val, right_val)?,
-                    BinaryOp::Subtract => self.operation_subtract(left_val, right_val)?,
-                    BinaryOp::Multiply => self.operation_multiply(left_val, right_val)?,
-                    BinaryOp::Divide => self.operation_divide(left_val, right_val)?,
-                    BinaryOp::Modulo => self.operation_modulo(left_val, right_val)?,
-                    BinaryOp::Equal => self.operation_equal(left_val, right_val)?,
-                    BinaryOp::NotEqual => self.operation_neq(left_val, right_val)?,
-                    BinaryOp::GreaterThan => self.operation_greater_than(left_val, right_val)?,
-                    BinaryOp::LessThan => self.operation_less_than(left_val, right_val)?,
-                    BinaryOp::GreaterEq => self.operation_geq(left_val, right_val)?,
-                    BinaryOp::LessEq => self.operation_leq(left_val, right_val)?,
+                    BinaryOp::Add => operation_add(left_val, right_val)?,
+                    BinaryOp::Subtract => operation_subtract(left_val, right_val)?,
+                    BinaryOp::Multiply => operation_multiply(left_val, right_val)?,
+                    BinaryOp::Divide => operation_divide(left_val, right_val)?,
+                    BinaryOp::Modulo => operation_modulo(left_val, right_val)?,
+                    BinaryOp::Equal => operation_equal(left_val, right_val)?,
+                    BinaryOp::NotEqual => operation_neq(left_val, right_val)?,
+                    BinaryOp::GreaterThan => operation_greater_than(left_val, right_val)?,
+                    BinaryOp::LessThan => operation_less_than(left_val, right_val)?,
+                    BinaryOp::GreaterEq => operation_geq(left_val, right_val)?,
+                    BinaryOp::LessEq => operation_leq(left_val, right_val)?,
                 }
             }
             Expr::Unary { operation, right } => {
                 let right_val = self.evaluate(right)?;
                 match operation {
-                    UnaryOp::Negate => self.unary_num_negate(right_val)?,
-                    UnaryOp::BitNot => self.unary_bit_not(right_val)?,
+                    UnaryOp::Negate => unary_num_negate(right_val)?,
+                    UnaryOp::BitNot => unary_bit_not(right_val)?,
                 }
             }
             Expr::Call { callee, args } => {
@@ -448,7 +447,7 @@ mod tests {
         ];
 
         let mut interpreter = Interpreter::new(&mut out, 0);
-        interpreter.interpret(&expr);
+        interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"4\n5\n");
     }
@@ -474,7 +473,7 @@ mod tests {
         ))];
 
         let mut interpreter = Interpreter::new(&mut out, 0);
-        interpreter.interpret(&expr);
+        interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"bar\n");
     }
@@ -603,7 +602,7 @@ mod tests {
 
         let expr = vec![expr!(Decl(NumLit(4.0), 0)), expr!(VarSet(NumLit(5.0), 0))];
 
-        interpreter.interpret(&expr);
+        interpreter.interpret(&expr).unwrap();
 
         assert_eq!(interpreter.var_storage[0], RuntimeVal::Number(5.0));
     }
@@ -619,7 +618,7 @@ mod tests {
         ];
         let eps = 0.012; // margin of time for program to run after sleep
 
-        interpreter.interpret(&test);
+        interpreter.interpret(&test).unwrap();
         if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
             assert!(
                 eps > (c - 1.0).abs(),
@@ -640,7 +639,7 @@ mod tests {
 
         let mut interpreter = Interpreter::new(&mut out, 1);
 
-        interpreter.interpret(&test);
+        interpreter.interpret(&test).unwrap();
         let RuntimeVal::Number(c) = interpreter.var_storage[0] else {
             panic!("invalid var in var_storage")
         };

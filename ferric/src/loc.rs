@@ -68,7 +68,7 @@ impl ProgramLine<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Loc {
     line: usize,
     col: usize,
@@ -116,7 +116,7 @@ impl Loc {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     start: Loc,
     end: Loc,
@@ -174,7 +174,7 @@ impl Span {
 impl From<Loc> for Span {
     fn from(value: Loc) -> Self {
         Span {
-            start: value.clone(),
+            start: value,
             end: value,
         }
     }
@@ -186,7 +186,7 @@ impl Add<Span> for Span {
         let locs = [self.start, self.end, rhs.start, rhs.end];
         let min = locs.iter().min().unwrap();
         let max = locs.iter().max().unwrap();
-        Self::new(min.clone(), max.clone())
+        Self::new(*min, *max)
     }
 }
 
@@ -196,7 +196,7 @@ impl Add<Loc> for Span {
         let locs = [self.start, self.end, rhs];
         let min = locs.iter().min().unwrap();
         let max = locs.iter().max().unwrap();
-        Self::new(min.clone(), max.clone())
+        Self::new(*min, *max)
     }
 }
 
@@ -206,7 +206,7 @@ impl Add<Span> for Loc {
         let locs = [self, rhs.start, rhs.end];
         let min = locs.iter().min().unwrap();
         let max = locs.iter().max().unwrap();
-        Span::new(min.clone(), max.clone())
+        Span::new(*min, *max)
     }
 }
 
@@ -216,6 +216,6 @@ impl Add<Loc> for Loc {
         let locs = [self, rhs];
         let min = locs.iter().min().unwrap();
         let max = locs.iter().max().unwrap();
-        Span::new(min.clone(), max.clone())
+        Span::new(*min, *max)
     }
 }

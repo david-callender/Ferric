@@ -236,7 +236,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             }
         }
         Ok(Lexeme::new(
-            Token::NumLit(self.parse_number(num, span.clone())?),
+            Token::NumLit(self.parse_number(num, span)?),
             span,
         ))
     }
@@ -288,7 +288,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             span = span + loc;
         }
         let ident = String::from_utf8(ident_bytes)
-            .map_err(|err| LexerError::IdentInvalidUtf8(self.src.clone(), span.clone(), err))?;
+            .map_err(|err| LexerError::IdentInvalidUtf8(self.src.clone(), span, err))?;
 
         let tok = if let Some(keyword) = self.keywords.get(ident.as_str()) {
             keyword.clone()
@@ -305,12 +305,12 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         loop {
             let (s, loc) = self.next().ok_or(LexerError::UnterminatedStrLit(
                 self.src.clone(),
-                span.clone(),
+                span,
             ))?;
-            span = span + loc.clone();
+            span = span + loc;
             if s == b'"' {
                 let st = String::from_utf8(st).map_err(|err| {
-                    LexerError::StrLitInvalidUtf8(self.src.clone(), span.clone(), err)
+                    LexerError::StrLitInvalidUtf8(self.src.clone(), span, err)
                 })?;
                 return Ok(Lexeme::new(Token::StringLit(st), span));
             }
@@ -318,10 +318,10 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
                 // should be made into its own error
                 let (esc, esc_loc) = self.next().ok_or(LexerError::InvalidEscapeSequence(
                     self.src.clone(),
-                    span.clone(),
+                    span,
                     b' ',
                 ))?;
-                span = span + esc_loc.clone();
+                span = span + esc_loc;
                 match esc {
                     b'n' => st.push(b'\n'),
                     b't' => st.push(b'\t'),

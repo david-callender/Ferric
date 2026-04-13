@@ -222,19 +222,20 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         }
     }
 
-    fn lex_number_lit(&mut self, first: u8, first_loc: Loc) -> Result<Lexeme, LexerError> {
+    fn lex_number_lit(&mut self, first: u8, start: Loc) -> Result<Lexeme, LexerError> {
         let mut num = Vec::new();
         num.push(first);
-        let mut span: Span = first_loc.into();
+        let mut end: Loc = start;
         while let Some(a) = self.stream.peek() {
             if a.is_ascii_digit() || *a == b'.' {
                 num.push(*a);
                 let (_, loc) = self.next().unwrap();
-                span = span + loc;
+                end = loc;
             } else {
                 break;
             }
         }
+        let span = Span::new(start, end);
         Ok(Lexeme::new(
             Token::NumLit(self.parse_number(num, span)?),
             span,
@@ -277,16 +278,17 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         Ok(num)
     }
 
-    fn lex_ident(&mut self, first: u8, first_loc: Loc) -> Result<Lexeme, LexerError> {
+    fn lex_ident(&mut self, first: u8, start: Loc) -> Result<Lexeme, LexerError> {
         let mut ident_bytes = vec![first];
-        let mut span: Span = first_loc.into();
+        let mut end: Loc = start;
         while let Some(b) = self.stream.peek()
             && (b.is_ascii_alphanumeric() || *b == b'_')
         {
             ident_bytes.push(*b);
             let (_, loc) = self.next().unwrap();
-            span = span + loc;
+            end = loc;
         }
+        let span = Span::new(start, end);
         let ident = String::from_utf8(ident_bytes)
             .map_err(|err| LexerError::IdentInvalidUtf8(self.src.clone(), span, err))?;
 
@@ -299,29 +301,29 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         Ok(Lexeme::new(tok, span))
     }
 
-    fn lex_string_lit(&mut self, first: Loc) -> Result<Lexeme, LexerError> {
+    fn lex_string_lit(&mut self, start: Loc) -> Result<Lexeme, LexerError> {
         let mut st = Vec::new();
-        let mut span: Span = first.into();
+        let mut end: Loc = start;
         loop {
             let (s, loc) = self.next().ok_or(LexerError::UnterminatedStrLit(
                 self.src.clone(),
-                span,
+                Span::new(start, end),
             ))?;
-            span = span + loc;
+            end = loc;
             if s == b'"' {
-                let st = String::from_utf8(st).map_err(|err| {
-                    LexerError::StrLitInvalidUtf8(self.src.clone(), span, err)
-                })?;
+                let span = Span::new(start, end);
+                let st = String::from_utf8(st)
+                    .map_err(|err| LexerError::StrLitInvalidUtf8(self.src.clone(), span, err))?;
                 return Ok(Lexeme::new(Token::StringLit(st), span));
             }
             if s == b'\\' {
                 // should be made into its own error
                 let (esc, esc_loc) = self.next().ok_or(LexerError::InvalidEscapeSequence(
                     self.src.clone(),
-                    span,
+                    loc.into(),
                     b' ',
                 ))?;
-                span = span + esc_loc;
+                end = esc_loc;
                 match esc {
                     b'n' => st.push(b'\n'),
                     b't' => st.push(b'\t'),

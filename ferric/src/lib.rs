@@ -1,8 +1,8 @@
 pub mod interpreter;
 pub mod lexer;
+pub mod loc;
 mod macros;
 pub mod parser;
-pub mod loc;
 
 #[cfg(test)]
 mod tests {
@@ -10,7 +10,9 @@ mod tests {
 
     fn harness(src: &str) -> String {
         let src = ProgramSrc::new(src.to_string());
-        let (expr, var_storage_size) = Parser::new(Lexer::new(src.clone().stream(), src)).parse();
+        let (expr, var_storage_size) = Parser::new(Lexer::new(src.clone().stream(), src))
+            .parse()
+            .unwrap();
 
         let mut output = vec![];
 

@@ -7,7 +7,7 @@ use crate::{
     lexer::{Lexeme, LexerError, Token},
 };
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum ParserError {
     #[error(transparent)]
     LexerError(#[from] LexerError),
@@ -89,16 +89,25 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn matches(&mut self, expected: Token) -> bool {
-        if self
-            .stream
-            .peek()
-            .is_some_and(|x| x.as_ref().is_ok_and(|x| x.t == expected))
-        {
-            let _ = self.stream.next().unwrap();
-            true
+    fn next(&mut self) -> Result<Option<Lexeme>, ParserError> {
+        Ok(self.stream.next().transpose()?)
+    }
+
+    fn peek(&mut self) -> Result<Option<&Lexeme>, ParserError> {
+        let peeked = self.stream.peek();
+        match peeked {
+            Some(Ok(lexeme)) => Ok(Some(lexeme)),
+            Some(Err(err)) => Err(ParserError::LexerError(err.clone())),
+            None => Ok(None),
+        }
+    }
+
+    fn matches(&mut self, expected: Token) -> Result<bool, ParserError> {
+        if self.peek()?.is_some_and(|x| x.t == expected) {
+            let _ = self.next()?.unwrap();
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -114,57 +123,57 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         None
     }
 
-    fn consume(&mut self, expected: Token, message: &str) -> Token {
-        let token = self.stream.next().expect("expected token, got none").t;
+    fn consume(&mut self, expected: Token, message: &str) -> Result<Token, ParserError> {
+        let token = self.next()?.expect("expected token, got none").t;
         assert_eq!(token, expected, "{message}");
         drop(expected);
-        token
+        Ok(token)
     }
 
-    fn consume_ident(&mut self, message: &str) -> String {
+    fn consume_ident(&mut self, message: &str) -> Result<String, ParserError> {
         let Some(Lexeme {
             t: Token::Ident(name),
             span: _,
-        }) = self.stream.next()
+        }) = self.next()?
         else {
             panic!("{message}");
         };
-        name
+        Ok(name)
     }
 
-    pub fn parse(&mut self) -> (Vec<Expr>, usize) {
+    pub fn parse(&mut self) -> Result<(Vec<Expr>, usize), ParserError> {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
-            exprs.push(self.parse_expr());
-            self.consume(Token::Semi, "Expected ';' after expression");
+            exprs.push(self.parse_expr()?);
+            self.consume(Token::Semi, "Expected ';' after expression")?;
         }
-        (exprs, self.next_index)
+        Ok((exprs, self.next_index))
     }
 
-    fn parse_expr(&mut self) -> Expr {
+    fn parse_expr(&mut self) -> Result<Expr, ParserError> {
         self.parse_var_set()
     }
 
-    fn parse_var_set(&mut self) -> Expr {
-        let left = self.parse_comparisons();
+    fn parse_var_set(&mut self) -> Result<Expr, ParserError> {
+        let left = self.parse_comparisons()?;
 
-        if self.matches(Token::Eq) {
-            let right = self.parse_comparisons();
+        if self.matches(Token::Eq)? {
+            let right = self.parse_comparisons()?;
 
             let Expr::VarGet { slot } = left else {
                 panic!("Expected variable name to be an identifier");
             };
 
-            return Expr::VarSet {
+            return Ok(Expr::VarSet {
                 value: Box::new(right),
                 slot,
-            };
+            });
         }
-        left
+        Ok(left)
     }
 
-    fn parse_comparisons(&mut self) -> Expr {
-        let left = self.parse_add_subtract();
+    fn parse_comparisons(&mut self) -> Result<Expr, ParserError> {
+        let left = self.parse_add_subtract()?;
         let operation = match self.is_one_of([
             Token::Greater,
             Token::GreaterEq,
@@ -180,67 +189,67 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Some(Token::Greater) => BinaryOp::GreaterThan,
             Some(Token::GreaterEq) => BinaryOp::GreaterEq,
             Some(_) => unreachable!(),
-            None => return left,
+            None => return Ok(left),
         };
-        let right = self.parse_add_subtract();
-        Expr::Binary {
+        let right = self.parse_add_subtract()?;
+        Ok(Expr::Binary {
             left: Box::new(left),
             operation,
             right: Box::new(right),
-        }
+        })
     }
 
-    fn parse_add_subtract(&mut self) -> Expr {
-        let left = self.parse_mult_div_mod();
+    fn parse_add_subtract(&mut self) -> Result<Expr, ParserError> {
+        let left = self.parse_mult_div_mod()?;
 
-        if self.matches(Token::Plus) {
-            let right = self.parse_mult_div_mod();
-            return Expr::Binary {
+        if self.matches(Token::Plus)? {
+            let right = self.parse_mult_div_mod()?;
+            return Ok(Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Add,
                 right: Box::new(right),
-            };
-        } else if self.matches(Token::Minus) {
-            let right = self.parse_mult_div_mod();
-            return Expr::Binary {
+            });
+        } else if self.matches(Token::Minus)? {
+            let right = self.parse_mult_div_mod()?;
+            return Ok(Expr::Binary {
                 left: Box::new(left),
                 operation: BinaryOp::Subtract,
                 right: Box::new(right),
-            };
+            });
         }
-        left
+        Ok(left)
     }
 
-    fn parse_mult_div_mod(&mut self) -> Expr {
-        let left = self.parse_unary_op();
+    fn parse_mult_div_mod(&mut self) -> Result<Expr, ParserError> {
+        let left = self.parse_unary_op()?;
         let operation = match self.is_one_of([Token::Star, Token::Slash, Token::Percent]) {
             Some(Token::Star) => BinaryOp::Multiply,
             Some(Token::Slash) => BinaryOp::Divide,
             Some(Token::Percent) => BinaryOp::Modulo,
             Some(_) => unreachable!(),
-            None => return left,
+            None => return Ok(left),
         };
-        let right = self.parse_unary_op();
-        Expr::Binary {
+        let right = self.parse_unary_op()?;
+        Ok(Expr::Binary {
             left: Box::new(left),
             operation,
             right: Box::new(right),
-        }
+        })
     }
 
-    fn parse_unary_op(&mut self) -> Expr {
-        if self.matches(Token::Minus) {
-            let right = self.parse_func_call();
-            return Expr::Unary {
+    fn parse_unary_op(&mut self) -> Result<Expr, ParserError> {
+        if self.matches(Token::Minus)? {
+            let right = self.parse_func_call()?;
+            return Ok(Expr::Unary {
                 operation: UnaryOp::Negate,
                 right: Box::new(right),
-            };
-        } else if self.matches(Token::Tilde) {
-            let right = self.parse_func_call();
-            return Expr::Unary {
+            });
+        } else if self.matches(Token::Tilde)? {
+            let right = self.parse_func_call()?;
+            return Ok(Expr::Unary {
                 operation: UnaryOp::BitNot,
                 right: Box::new(right),
-            };
+            });
         }
         self.parse_func_call()
     }
@@ -248,35 +257,35 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     // consume_args also consumes the closing paren of the
     // arguments list, but assumes that the opening paren has
     // already been parsed.
-    fn consume_args(&mut self) -> Vec<Expr> {
+    fn consume_args(&mut self) -> Result<Vec<Expr>, ParserError> {
         let mut args_vec = vec![];
 
-        if !self.matches(Token::CloseParen) {
-            args_vec.push(self.parse_expr());
-            while self.matches(Token::Comma) {
-                args_vec.push(self.parse_expr());
+        if !self.matches(Token::CloseParen)? {
+            args_vec.push(self.parse_expr()?);
+            while self.matches(Token::Comma)? {
+                args_vec.push(self.parse_expr()?);
             }
             self.consume(
                 Token::CloseParen,
                 "Unclosed function call parentheses or missing comma",
-            );
+            )?;
         }
 
-        args_vec
+        Ok(args_vec)
     }
 
-    fn parse_func_call(&mut self) -> Expr {
-        let mut func_call = self.parse_basic();
+    fn parse_func_call(&mut self) -> Result<Expr, ParserError> {
+        let mut func_call = self.parse_basic()?;
 
-        while self.matches(Token::OpenParen) {
-            let args_list = self.consume_args();
+        while self.matches(Token::OpenParen)? {
+            let args_list = self.consume_args()?;
             func_call = Expr::Call {
                 callee: Box::new(func_call),
                 args: args_list,
             };
         }
 
-        func_call
+        Ok(func_call)
     }
 
     fn find_var(&self, name: &String) -> Option<usize> {
@@ -288,10 +297,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         None
     }
 
-    fn parse_basic(&mut self) -> Expr {
-        let token = self.stream.next().expect("expected basic token, got none");
-        match token.t {
-            Token::OpenParen => self.parse_paren(),
+    fn parse_basic(&mut self) -> Result<Expr, ParserError> {
+        let token = self.next()?.expect("expected basic token, got none");
+        let expr = match token.t {
+            Token::OpenParen => self.parse_paren()?,
             Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
             Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
             Token::True => Expr::Literal(RuntimeVal::Boolean(true)),
@@ -300,26 +309,28 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 .find_var(&identifier)
                 .map(|slot| Expr::VarGet { slot })
                 .unwrap_or(Expr::Ident(identifier)),
-            Token::Let => self.parse_decl(),
-            Token::If => self.parse_if(),
-            Token::OpenBracket => self.parse_block(),
-            Token::While => self.parse_while(),
+            Token::Let => self.parse_decl()?,
+            Token::If => self.parse_if()?,
+            Token::OpenBracket => self.parse_block()?,
+            Token::While => self.parse_while()?,
             _ => panic!("expected basic token, got non-basic token {}", token.t),
-        }
+        };
+        
+        Ok(expr)
     }
 
     // parse_paren assumes that the initial OpenParen token has already
     // been consumed.
-    fn parse_paren(&mut self) -> Expr {
-        let inner_expr = self.parse_expr();
-        self.consume(Token::CloseParen, "unclosed paren block");
-        inner_expr
+    fn parse_paren(&mut self) -> Result<Expr, ParserError> {
+        let inner_expr = self.parse_expr()?;
+        self.consume(Token::CloseParen, "unclosed paren block")?;
+        Ok(inner_expr)
     }
 
-    fn parse_decl(&mut self) -> Expr {
-        let name = self.consume_ident("Expected variable name after let");
-        self.consume(Token::Eq, "Expected '=' after let");
-        let init = self.parse_expr();
+    fn parse_decl(&mut self) -> Result<Expr, ParserError> {
+        let name = self.consume_ident("Expected variable name after let")?;
+        self.consume(Token::Eq, "Expected '=' after let")?;
+        let init = self.parse_expr()?;
         self.env
             .last_mut()
             .expect("no global env")
@@ -329,20 +340,20 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             slot: self.next_index,
         };
         self.next_index += 1;
-        expr
+        Ok(expr)
     }
 
-    fn parse_if(&mut self) -> Expr {
-        let cond = self.parse_expr();
-        self.consume(Token::OpenBracket, "Expected '{' after if condition");
+    fn parse_if(&mut self) -> Result<Expr, ParserError> {
+        let cond = self.parse_expr()?;
+        self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
-        let then = self.parse_block();
+        let then = self.parse_block()?;
 
-        let otherwise = if self.matches(Token::Otherwise) {
-            let otherwise = if self.matches(Token::OpenBracket) {
-                self.parse_block()
-            } else if self.matches(Token::If) {
-                self.parse_if()
+        let otherwise = if self.matches(Token::Otherwise)? {
+            let otherwise = if self.matches(Token::OpenBracket)? {
+                self.parse_block()?
+            } else if self.matches(Token::If)? {
+                self.parse_if()?
             } else {
                 panic!("Expected '{{' or 'if' after 'otherwise'");
             };
@@ -352,45 +363,45 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             None
         };
 
-        Expr::If {
+        Ok(Expr::If {
             cond: Box::new(cond),
             then: Box::new(then),
             otherwise,
-        }
+        })
     }
 
-    fn parse_while(&mut self) -> Expr {
-        let cond = Box::new(self.parse_expr());
-        self.consume(Token::OpenBracket, "Expected '{' after while");
-        let body = Box::new(self.parse_block());
-        Expr::While { cond, body }
+    fn parse_while(&mut self) -> Result<Expr, ParserError> {
+        let cond = Box::new(self.parse_expr()?);
+        self.consume(Token::OpenBracket, "Expected '{' after while")?;
+        let body = Box::new(self.parse_block()?);
+        Ok(Expr::While { cond, body })
     }
 
     // assumes the leading Token::OpenBracket has already been consumed.
-    fn parse_block(&mut self) -> Expr {
-        if self.matches(Token::CloseBracket) {
-            return Expr::Block(vec![]);
+    fn parse_block(&mut self) -> Result<Expr, ParserError> {
+        if self.matches(Token::CloseBracket)? {
+            return Ok(Expr::Block(vec![]));
         }
 
         // each block creates its own scope, so add a blank scope to the
         // environment stack.
         self.env.push(HashMap::new());
 
-        let mut exprs = vec![self.parse_expr()];
-        while self.matches(Token::Semi) {
-            if self.matches(Token::CloseBracket) {
+        let mut exprs = vec![self.parse_expr()?];
+        while self.matches(Token::Semi)? {
+            if self.matches(Token::CloseBracket)? {
                 exprs.push(Expr::Literal(RuntimeVal::Null));
                 self.env.pop().expect("misaligned environment stack");
-                return Expr::Block(exprs);
+                return Ok(Expr::Block(exprs));
             }
-            exprs.push(self.parse_expr());
+            exprs.push(self.parse_expr()?);
         }
         self.consume(
             Token::CloseBracket,
             "Expected '}' after block. Check for a missing semicolon on the previous line",
-        );
+        )?;
         self.env.pop().expect("misaligned environment stack");
-        Expr::Block(exprs)
+        Ok(Expr::Block(exprs))
     }
 }
 
@@ -407,61 +418,61 @@ mod tests {
     #[test]
     fn num_literal() {
         let mut parser = Parser::new(tokens!(NumLit(4.0)));
-        assert_eq!(parser.parse_expr(), expr!(NumLit(4.0)));
+        assert_eq!(parser.parse_expr().unwrap(), expr!(NumLit(4.0)));
     }
 
     #[test]
     fn string_literal() {
         let mut parser = Parser::new(tokens!(StrLit("dingus")));
-        assert_eq!(parser.parse_expr(), expr!(StrLit("dingus")));
+        assert_eq!(parser.parse_expr().unwrap(), expr!(StrLit("dingus")));
     }
 
     #[test]
     fn parentheses() {
         let mut parser = Parser::new(tokens!(OpenParen, NumLit(4.0), CloseParen));
-        assert_eq!(parser.parse_expr(), expr!(NumLit(4.0)));
+        assert_eq!(parser.parse_expr().unwrap(), expr!(NumLit(4.0)));
     }
 
     #[test]
     fn add() {
         let mut parser = Parser::new(tokens!(NumLit(4.0), Plus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn subtract() {
         let mut parser = Parser::new(tokens!(NumLit(4.0), Minus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Subtract, NumLit(5.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn multiply() {
         let mut parser = Parser::new(tokens!(NumLit(20.0), Star, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Multiply, NumLit(22.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn divide() {
         let mut parser = Parser::new(tokens!(NumLit(20.0), Slash, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Divide, NumLit(22.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn modulo() {
         let mut parser = Parser::new(tokens!(NumLit(10.0), Percent, NumLit(2.0)));
         let target = expr!(Binary(NumLit(10.0), Modulo, NumLit(2.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn simple_funcall() {
         let mut parser = Parser::new(tokens!(Ident("my_func"), OpenParen, CloseParen));
         let target = expr!(Call(Ident("my_func"), []));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
@@ -481,28 +492,28 @@ mod tests {
             Call(Ident("my_func"), [NumLit(42.0), NumLit(88.0)]),
             [StrLit("dingus")]
         ));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn unary_minus() {
         let mut parser = Parser::new(tokens!(Minus, NumLit(6.0)));
         let target = expr!(Unary(Negate, NumLit(6.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn unary_bitnot() {
         let mut parser = Parser::new(tokens!(Tilde, NumLit(6.0)));
         let target = expr!(Unary(BitNot, NumLit(6.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn unary_and_minus() {
         let mut parser = Parser::new(tokens!(Minus, NumLit(6.0), Minus, NumLit(6.0)));
         let target = expr!(Binary(Unary(Negate, NumLit(6.0)), Subtract, NumLit(6.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
@@ -516,7 +527,7 @@ mod tests {
             CloseParen
         ));
         let target = expr!(Unary(Negate, Binary(NumLit(6.0), Add, NumLit(6.0))));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
@@ -524,12 +535,12 @@ mod tests {
         // empty
         let mut parser = Parser::new(tokens!(OpenBracket, CloseBracket, Semi));
         let target = Expr::Block(vec![]);
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         // one, return last
         let mut parser = Parser::new(tokens!(OpenBracket, NumLit(4.0), CloseBracket, Semi));
         let target = expr!(Block { NumLit(4.0) });
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         // one, don't return last
         let mut parser = Parser::new(tokens!(OpenBracket, NumLit(4.0), Semi, CloseBracket, Semi));
@@ -537,7 +548,7 @@ mod tests {
             NumLit(4.0),
             Null()
         });
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         // many, return last
         let mut parser = Parser::new(tokens!(
@@ -552,7 +563,7 @@ mod tests {
             NumLit(4.0),
             NumLit(5.0)
         });
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         // many, don't return last
         let mut parser = Parser::new(tokens!(
@@ -569,7 +580,7 @@ mod tests {
             NumLit(5.0),
             Null()
         });
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
@@ -590,7 +601,7 @@ mod tests {
             None
         });
 
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         // if otherwise
         let mut parser = Parser::new(tokens!(
@@ -612,7 +623,7 @@ mod tests {
             Block { NumLit(5.0) }
         });
 
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         // if otherwise-if otherwise
         let mut parser = Parser::new(tokens!(
@@ -644,22 +655,22 @@ mod tests {
             }
         });
 
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn comparisons() {
         let mut parser = Parser::new(tokens!(NumLit(3.0), EqEq, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), Equal, NumLit(4.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         let mut parser = Parser::new(tokens!(NumLit(3.0), Greater, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), GreaterThan, NumLit(4.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
 
         let mut parser = Parser::new(tokens!(NumLit(3.0), LessEq, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), LessEq, NumLit(4.0)));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
@@ -678,7 +689,7 @@ mod tests {
             Equal,
             Binary(NumLit(9.0), Subtract, NumLit(3.0))
         ));
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
@@ -699,6 +710,6 @@ mod tests {
             }
         });
 
-        assert_eq!(parser.parse_expr(), target);
+        assert_eq!(parser.parse_expr().unwrap(), target);
     }
 }

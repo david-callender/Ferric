@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::loc::{Loc, ProgramSrc, Span};
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum LexerError {
     #[error("{}", .1.format(.0, "number literals cannot start with '.'"))]
     NumLitLeadingDecimal(ProgramSrc, Span),
@@ -15,7 +15,7 @@ pub enum LexerError {
     #[error("{}", .1.format(.0, "number literals cannot have multiple decimal separators"))]
     NumLitMultipleDecimals(ProgramSrc, Span),
 
-    #[error("{}", .1.format(.0, &format!("this byte ({} or {}) was not expected by the lexer", *.2 as char, .2)))]
+    #[error("{}", .1.format(.0, &format!("this byte ({} or {:#02X}) was not expected by the lexer", *.2 as char, .2)))]
     InvalidByte(ProgramSrc, Loc, u8),
 
     #[error("{}", .1.format(.0, &format!("this string literal was not valid utf-8: {}", .2)))]
@@ -118,7 +118,6 @@ impl std::fmt::Display for Token {
     }
 }
 
-
 pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
     keywords: HashMap<&'static str, Token>,
@@ -166,7 +165,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         }
         Some((n, this))
     }
-    
+
     fn lex_byte(&mut self, c: u8, loc: Loc) -> Result<Lexeme, LexerError> {
         let tok = match c {
             b'(' => Lexeme::new(Token::OpenParen, loc.into()),
@@ -216,7 +215,10 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             (b'<', _) => Lexeme::new(Token::Less, loc.into()),
             (b'>', _) => Lexeme::new(Token::Greater, loc.into()),
             (b'!', _) => Lexeme::new(Token::Bang, loc.into()),
-            _ => panic!("Unreachable: invalid start byte in multi-byte call {}", first as char),
+            _ => panic!(
+                "Unreachable: invalid start byte in multi-byte call {}",
+                first as char
+            ),
         }
     }
 
@@ -233,19 +235,22 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
                 break;
             }
         }
-        Ok(Lexeme::new(Token::NumLit(self.parse_number(num, span.clone())?), span))
+        Ok(Lexeme::new(
+            Token::NumLit(self.parse_number(num, span.clone())?),
+            span,
+        ))
     }
-    
+
     fn parse_number(&mut self, digits: Vec<u8>, span: Span) -> Result<f64, LexerError> {
         let mut num = 0.0;
         let mut i: i32 = -1;
         let mut after_dec = false;
         let mut frac_appears = false;
-        
+
         if digits[0] == b'.' {
             return Err(LexerError::NumLitLeadingDecimal(self.src.clone(), span));
         }
-    
+
         for b in digits {
             if b == b'.' {
                 if after_dec {
@@ -282,7 +287,8 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             let (_, loc) = self.next().unwrap();
             span = span + loc;
         }
-        let ident = String::from_utf8(ident_bytes).map_err(|err| LexerError::IdentInvalidUtf8(self.src.clone(), span.clone(), err))?;
+        let ident = String::from_utf8(ident_bytes)
+            .map_err(|err| LexerError::IdentInvalidUtf8(self.src.clone(), span.clone(), err))?;
 
         let tok = if let Some(keyword) = self.keywords.get(ident.as_str()) {
             keyword.clone()
@@ -301,7 +307,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
                 self.src.clone(),
                 span.clone(),
             ))?;
-            span = span + loc;
+            span = span + loc.clone();
             if s == b'"' {
                 let st = String::from_utf8(st).map_err(|err| {
                     LexerError::StrLitInvalidUtf8(self.src.clone(), span.clone(), err)
@@ -310,15 +316,25 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             }
             if s == b'\\' {
                 // should be made into its own error
-                let (esc, loc) = self.next().ok_or(LexerError::InvalidEscapeSequence(self.src.clone(), span.clone(), b' '))?;
-                span = span + loc;
+                let (esc, esc_loc) = self.next().ok_or(LexerError::InvalidEscapeSequence(
+                    self.src.clone(),
+                    span.clone(),
+                    b' ',
+                ))?;
+                span = span + esc_loc.clone();
                 match esc {
                     b'n' => st.push(b'\n'),
                     b't' => st.push(b'\t'),
                     b'r' => st.push(b'\r'),
                     b'"' => st.push(b'"'),
                     b'\\' => st.push(b'\\'),
-                    b => return Err(LexerError::InvalidEscapeSequence(self.src.clone(), span, b)),
+                    b => {
+                        return Err(LexerError::InvalidEscapeSequence(
+                            self.src.clone(),
+                            loc + esc_loc,
+                            b,
+                        ));
+                    }
                 }
                 continue;
             }
@@ -335,7 +351,7 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
             if c.is_ascii_whitespace() {
                 continue;
             }
-            
+
             let tok = self.lex_byte(c, loc);
 
             return Some(tok);

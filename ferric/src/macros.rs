@@ -1,13 +1,13 @@
 #[macro_export]
 macro_rules! one_token {
     (StrLit($s:expr)) => {
-        Lexeme::new(Token::StringLit(String::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1)))
+        Ok(Lexeme::new(Token::StringLit(String::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1))))
     };
     (Ident($s:expr)) => {
-        Lexeme::new(Token::Ident(String::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1)))
+        Ok(Lexeme::new(Token::Ident(String::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1))))
     };
     ($name:ident$(($($t:tt)*))?) => {
-        Lexeme::new(Token::$name$(($($t)*))?, Span::new(Loc::new(1, 1), Loc::new(1, 1)))
+        Ok(Lexeme::new(Token::$name$(($($t)*))?, Span::new(Loc::new(1, 1), Loc::new(1, 1))))
     };
 }
 

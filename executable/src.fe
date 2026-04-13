@@ -1,4 +1,4 @@
-let i = while false {};
-print(i);
-i = if false {1} otherwise {5} + 8;
-print(i);
+let i = "
+multiline string
+";
+while i < 100 {};

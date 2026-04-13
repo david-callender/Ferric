@@ -1,7 +1,7 @@
 use std::io::Write;
 
 use chrono::Utc;
-use ferric::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+use ferric::{interpreter::Interpreter, lexer::Lexer, loc::ProgramSrc, parser::Parser};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlPreElement;
 
@@ -39,15 +39,18 @@ pub fn ferric(src: &str, output: HtmlPreElement) {
     output.set_text_content(Some(""));
     let mut output = JsWriter { output };
 
-    let lexer = Lexer::new(src.bytes());
+    let src = ProgramSrc::new(src.to_string());
+
+    let stream = src.clone();
+    let lexer = Lexer::new(stream.stream(), src);
 
     let parser_start = Utc::now();
-    let (program, var_storage_size) = Parser::new(lexer).parse();
+    let (program, var_storage_size) = Parser::new(lexer).parse().unwrap();
     let parser_time = Utc::now() - parser_start;
 
     let interpreter_start = Utc::now();
     let mut interpreter = Interpreter::new(&mut output, var_storage_size);
-    interpreter.interpret(&program);
+    interpreter.interpret(&program).unwrap();
     let interpreter_time = Utc::now() - interpreter_start;
 
     write!(

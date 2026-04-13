@@ -1,18 +1,35 @@
+use thiserror::Error;
+
+use crate::{interpreter::RuntimeError, parser::ParserError};
+
 pub mod interpreter;
 pub mod lexer;
+pub mod loc;
 mod macros;
 pub mod parser;
 
+#[derive(Debug, Clone, Error)]
+pub enum FerricError {
+    #[error(transparent)]
+    ParserError(#[from] ParserError),
+
+    #[error(transparent)]
+    RuntimeError(#[from] RuntimeError),
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
+    use crate::{interpreter::Interpreter, lexer::Lexer, loc::ProgramSrc, parser::Parser};
 
     fn harness(src: &str) -> String {
-        let (expr, var_storage_size) = Parser::new(Lexer::new(src.bytes())).parse();
+        let src = ProgramSrc::new(src.to_string());
+        let (expr, var_storage_size) = Parser::new(Lexer::new(src.clone().stream(), src))
+            .parse()
+            .unwrap();
 
         let mut output = vec![];
 
-        Interpreter::new(&mut output, var_storage_size).interpret(&expr);
+        Interpreter::new(&mut output, var_storage_size).interpret(&expr).unwrap();
 
         String::from_utf8(output).expect("Program outputted invalid utf8")
     }

@@ -1,4 +1,35 @@
-use std::{collections::HashMap, iter::Peekable, vec};
+use std::{collections::HashMap, iter::Peekable, string::FromUtf8Error, vec};
+
+use thiserror::Error;
+
+use crate::loc::{Loc, ProgramSrc, Span};
+
+#[derive(Debug, Clone, Error)]
+pub enum LexerError {
+    #[error("{}", .1.format(.0, "number literals cannot start with '.'"))]
+    NumLitLeadingDecimal(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, "number literals cannot end with '.'"))]
+    NumLitTrailingDecimal(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, "number literals cannot have multiple decimal separators"))]
+    NumLitMultipleDecimals(ProgramSrc, Span),
+
+    #[error("{}", .1.format(.0, &format!("this byte ({} or {:#02X}) was not expected by the lexer", *.2 as char, .2)))]
+    InvalidByte(ProgramSrc, Loc, u8),
+
+    #[error("{}", .1.format(.0, &format!("this string literal was not valid utf-8: {}", .2)))]
+    StrLitInvalidUtf8(ProgramSrc, Span, FromUtf8Error),
+
+    #[error("{}", .1.format(.0, &format!("this identifier was not valid utf-8: {}", .2)))]
+    IdentInvalidUtf8(ProgramSrc, Span, FromUtf8Error),
+
+    #[error("{}", .1.format(.0, &format!("'\\{}' is not a valid escape sequence", *.2 as char)))]
+    InvalidEscapeSequence(ProgramSrc, Span, u8),
+
+    #[error("{}", .1.format(.0, "this string literal was not terminated"))]
+    UnterminatedStrLit(ProgramSrc, Span),
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -34,6 +65,18 @@ pub enum Token {
     StringLit(String),
     NumLit(f64),
     Ident(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Lexeme {
+    pub t: Token,
+    pub span: Span,
+}
+
+impl Lexeme {
+    pub fn new(t: Token, span: Span) -> Self {
+        Self { t, span }
+    }
 }
 
 impl std::fmt::Display for Token {
@@ -75,46 +118,17 @@ impl std::fmt::Display for Token {
     }
 }
 
-fn parse_number(digits: Vec<u8>) -> f64 {
-    let mut num = 0.0;
-    let mut i: i32 = -1;
-    let mut after_dec = false;
-    let mut frac_appears = false;
-
-    assert!(digits[0] != b'.', "Missing leading zero"); //Curently .1 will panic due to '.' being an invalid byte, but this will be useful later
-
-    for b in digits {
-        if b == b'.' {
-            assert!(!after_dec, "Multiple decimal points in number");
-            after_dec = true;
-            continue;
-        }
-        if b.is_ascii_digit() {
-            let n = f64::from(b - b'0');
-            if after_dec {
-                num += n * 10f64.powi(i);
-                i -= 1;
-                frac_appears = true;
-            } else {
-                num *= 10.0;
-                num += n;
-            }
-        }
-    }
-    assert!(
-        (!after_dec || frac_appears),
-        "No numbers detected after decimal"
-    );
-    num
-}
-
 pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
     keywords: HashMap<&'static str, Token>,
+    src: ProgramSrc,
+    line: usize,
+    col: usize,
 }
 
 impl<I: Iterator<Item = u8>> Lexer<I> {
-    pub fn new(stream: I) -> Self {
+    // TODO: unify into one param
+    pub fn new(stream: I, src: ProgramSrc) -> Self {
         let keywords = HashMap::from([
             ("let", Token::Let),
             ("let", Token::Let),
@@ -130,87 +144,199 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         Self {
             stream: stream.peekable(),
             keywords,
+            src,
+            line: 1,
+            col: 1,
         }
     }
 
-    fn lex_multi_byte(&mut self, first: u8) -> Token {
+    fn loc(&self) -> Loc {
+        Loc::new(self.line, self.col)
+    }
+
+    fn next(&mut self) -> Option<(u8, Loc)> {
+        let n = self.stream.next()?;
+        let this = self.loc();
+        if n == b'\n' {
+            self.line += 1;
+            self.col = 1;
+        } else {
+            self.col += 1;
+        }
+        Some((n, this))
+    }
+
+    fn lex_byte(&mut self, c: u8, loc: Loc) -> Result<Lexeme, LexerError> {
+        let tok = match c {
+            b'(' => Lexeme::new(Token::OpenParen, loc.into()),
+            b')' => Lexeme::new(Token::CloseParen, loc.into()),
+            b'{' => Lexeme::new(Token::OpenBracket, loc.into()),
+            b'}' => Lexeme::new(Token::CloseBracket, loc.into()),
+            b';' => Lexeme::new(Token::Semi, loc.into()),
+            b',' => Lexeme::new(Token::Comma, loc.into()),
+            b'+' => Lexeme::new(Token::Plus, loc.into()),
+            b'-' => Lexeme::new(Token::Minus, loc.into()),
+            b'*' => Lexeme::new(Token::Star, loc.into()),
+            b'/' => Lexeme::new(Token::Slash, loc.into()),
+            b'%' => Lexeme::new(Token::Percent, loc.into()),
+            b'~' => Lexeme::new(Token::Tilde, loc.into()),
+
+            b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c, loc),
+
+            x if x.is_ascii_digit() => self.lex_number_lit(x, loc)?,
+            x if x.is_ascii_alphabetic() || x == b'_' => self.lex_ident(x, loc)?,
+            b'"' => self.lex_string_lit(loc)?,
+
+            b => return Err(LexerError::InvalidByte(self.src.clone(), loc, b)),
+        };
+        Ok(tok)
+    }
+
+    fn lex_multi_byte(&mut self, first: u8, loc: Loc) -> Lexeme {
         let second = self.stream.peek();
         match (first, second) {
             (b'=', Some(b'=')) => {
-                self.stream.next();
-                Token::EqEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::EqEq, loc + snd)
             }
             (b'<', Some(b'=')) => {
-                self.stream.next();
-                Token::LessEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::LessEq, loc + snd)
             }
             (b'>', Some(b'=')) => {
-                self.stream.next();
-                Token::GreaterEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::GreaterEq, loc + snd)
             }
             (b'!', Some(b'=')) => {
-                self.stream.next();
-                Token::BangEq
+                let (_, snd) = self.next().unwrap();
+                Lexeme::new(Token::BangEq, loc + snd)
             }
-            (b'=', _) => Token::Eq,
-            (b'<', _) => Token::Less,
-            (b'>', _) => Token::Greater,
-            (b'!', _) => Token::Bang,
-            _ => panic!("Invalid byte {}", first as char),
+            (b'=', _) => Lexeme::new(Token::Eq, loc.into()),
+            (b'<', _) => Lexeme::new(Token::Less, loc.into()),
+            (b'>', _) => Lexeme::new(Token::Greater, loc.into()),
+            (b'!', _) => Lexeme::new(Token::Bang, loc.into()),
+            _ => panic!(
+                "Unreachable: invalid start byte in multi-byte call {}",
+                first as char
+            ),
         }
     }
 
-    fn lex_number_lit(&mut self, first: u8) -> Token {
+    fn lex_number_lit(&mut self, first: u8, start: Loc) -> Result<Lexeme, LexerError> {
         let mut num = Vec::new();
         num.push(first);
+        let mut end: Loc = start;
         while let Some(a) = self.stream.peek() {
             if a.is_ascii_digit() || *a == b'.' {
                 num.push(*a);
-                self.stream.next();
+                let (_, loc) = self.next().unwrap();
+                end = loc;
             } else {
                 break;
             }
         }
-        Token::NumLit(parse_number(num))
+        let span = Span::new(start, end);
+        Ok(Lexeme::new(
+            Token::NumLit(self.parse_number(num, span)?),
+            span,
+        ))
     }
 
-    fn lex_ident(&mut self, first: u8) -> Token {
+    fn parse_number(&mut self, digits: Vec<u8>, span: Span) -> Result<f64, LexerError> {
+        let mut num = 0.0;
+        let mut i: i32 = -1;
+        let mut after_dec = false;
+        let mut frac_appears = false;
+
+        if digits[0] == b'.' {
+            return Err(LexerError::NumLitLeadingDecimal(self.src.clone(), span));
+        }
+
+        for b in digits {
+            if b == b'.' {
+                if after_dec {
+                    return Err(LexerError::NumLitMultipleDecimals(self.src.clone(), span));
+                }
+                after_dec = true;
+                continue;
+            }
+            if b.is_ascii_digit() {
+                let n = f64::from(b - b'0');
+                if after_dec {
+                    num += n * 10f64.powi(i);
+                    i -= 1;
+                    frac_appears = true;
+                } else {
+                    num *= 10.0;
+                    num += n;
+                }
+            }
+        }
+        if after_dec && !frac_appears {
+            return Err(LexerError::NumLitTrailingDecimal(self.src.clone(), span));
+        }
+        Ok(num)
+    }
+
+    fn lex_ident(&mut self, first: u8, start: Loc) -> Result<Lexeme, LexerError> {
         let mut ident_bytes = vec![first];
+        let mut end: Loc = start;
         while let Some(b) = self.stream.peek()
             && (b.is_ascii_alphanumeric() || *b == b'_')
         {
             ident_bytes.push(*b);
-            self.stream.next();
+            let (_, loc) = self.next().unwrap();
+            end = loc;
         }
-        let ident = String::from_utf8(ident_bytes).expect("Identifier wasn't valid utf8");
+        let span = Span::new(start, end);
+        let ident = String::from_utf8(ident_bytes)
+            .map_err(|err| LexerError::IdentInvalidUtf8(self.src.clone(), span, err))?;
 
-        if let Some(keyword) = self.keywords.get(ident.as_str()) {
+        let tok = if let Some(keyword) = self.keywords.get(ident.as_str()) {
             keyword.clone()
         } else {
             Token::Ident(ident)
-        }
+        };
+
+        Ok(Lexeme::new(tok, span))
     }
 
-    fn lex_string_lit(&mut self) -> Token {
+    fn lex_string_lit(&mut self, start: Loc) -> Result<Lexeme, LexerError> {
         let mut st = Vec::new();
+        let mut end: Loc = start;
         loop {
-            let s = self.stream.next().expect("unterminated string literal");
+            let (s, loc) = self.next().ok_or(LexerError::UnterminatedStrLit(
+                self.src.clone(),
+                Span::new(start, end),
+            ))?;
+            end = loc;
             if s == b'"' {
-                let st = String::from_utf8(st).expect("invalid UTF-8 in string literal");
-                return Token::StringLit(st);
+                let span = Span::new(start, end);
+                let st = String::from_utf8(st)
+                    .map_err(|err| LexerError::StrLitInvalidUtf8(self.src.clone(), span, err))?;
+                return Ok(Lexeme::new(Token::StringLit(st), span));
             }
             if s == b'\\' {
-                let esc = self
-                    .stream
-                    .next()
-                    .expect("expected escape sequence, got none");
+                // should be made into its own error
+                let (esc, esc_loc) = self.next().ok_or(LexerError::InvalidEscapeSequence(
+                    self.src.clone(),
+                    loc.into(),
+                    b' ',
+                ))?;
+                end = esc_loc;
                 match esc {
                     b'n' => st.push(b'\n'),
                     b't' => st.push(b'\t'),
                     b'r' => st.push(b'\r'),
                     b'"' => st.push(b'"'),
                     b'\\' => st.push(b'\\'),
-                    _ => panic!("Invalid escape sequence \\{}", s as char),
+                    b => {
+                        return Err(LexerError::InvalidEscapeSequence(
+                            self.src.clone(),
+                            loc + esc_loc,
+                            b,
+                        ));
+                    }
                 }
                 continue;
             }
@@ -220,36 +346,15 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
 }
 
 impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
-    type Item = Token;
+    type Item = Result<Lexeme, LexerError>;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let c = self.stream.next()?;
+            let (c, loc) = self.next()?;
             if c.is_ascii_whitespace() {
                 continue;
             }
 
-            let tok = match c {
-                b'(' => Token::OpenParen,
-                b')' => Token::CloseParen,
-                b'{' => Token::OpenBracket,
-                b'}' => Token::CloseBracket,
-                b';' => Token::Semi,
-                b',' => Token::Comma,
-                b'+' => Token::Plus,
-                b'-' => Token::Minus,
-                b'*' => Token::Star,
-                b'/' => Token::Slash,
-                b'%' => Token::Percent,
-                b'~' => Token::Tilde,
-
-                b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c),
-
-                x if x.is_ascii_digit() => self.lex_number_lit(x),
-                x if x.is_ascii_alphabetic() || x == b'_' => self.lex_ident(x),
-                b'"' => self.lex_string_lit(),
-
-                b => panic!("Invalid byte {}", b as char),
-            };
+            let tok = self.lex_byte(c, loc);
 
             return Some(tok);
         }
@@ -262,7 +367,10 @@ mod tests {
     use Token as T;
 
     fn collect_tokens(src: &str) -> Vec<Token> {
-        Lexer::new(src.bytes()).collect()
+        let src = ProgramSrc::new(src.to_string());
+        Lexer::new(src.clone().stream(), src)
+            .map(|lx| lx.unwrap().t)
+            .collect()
     }
 
     #[test]

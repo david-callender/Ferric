@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 chrono = "0.4.44"
+thiserror = "2.0.18"
 
 [lints]
 workspace = true

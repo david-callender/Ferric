@@ -23,10 +23,7 @@ type Res<T> = Result<T, RuntimeError>;
 #[derive(Debug, Clone, PartialEq)]
 enum Function {
     BuiltIn(String),
-    Custom {
-        args: Rc<str>,
-        body: Rc<[Expr]>,
-    }
+    Custom { args: Rc<str>, body: Rc<[Expr]> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,7 +137,7 @@ fn operation_greater_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal
 fn operation_less_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 < n2)),
-        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 < s2)),
         _ => Err(RuntimeError::BinaryTypeMismatch),
     }
 }
@@ -148,7 +145,7 @@ fn operation_less_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
 fn operation_geq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 >= n2)),
-        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 >= s2)),
         _ => Err(RuntimeError::BinaryTypeMismatch),
     }
 }
@@ -156,7 +153,7 @@ fn operation_geq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
 fn operation_leq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 <= n2)),
-        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 <= s2)),
         _ => Err(RuntimeError::BinaryTypeMismatch),
     }
 }
@@ -297,7 +294,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 RuntimeVal::Null // temp, TODO: handle .collect()
             }
-            Expr::Func { body, params } => todo!()
+            Expr::Func { body, params } => todo!(),
         })
     }
 

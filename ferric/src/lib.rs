@@ -29,7 +29,9 @@ mod tests {
 
         let mut output = vec![];
 
-        Interpreter::new(&mut output, var_storage_size).interpret(&expr).unwrap();
+        Interpreter::new(&mut output, var_storage_size)
+            .interpret(&expr)
+            .unwrap();
 
         String::from_utf8(output).expect("Program outputted invalid utf8")
     }

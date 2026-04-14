@@ -57,7 +57,7 @@ pub enum Expr {
     Func {
         params: Vec<String>,
         body: Vec<Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

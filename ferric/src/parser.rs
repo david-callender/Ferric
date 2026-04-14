@@ -749,4 +749,26 @@ mod tests {
 
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
+
+    //    #[test]
+    //    pub fn function_definition() {
+    //	let mut parser = Parser::new(tokens![
+    //	    Fn,
+    //	    OpenParen,
+    //	    Ident("param1".to_string()),
+    //	    Comma,
+    //	    Ident("Param2".to_string()),
+    //	    CloseParen,
+    //	    OpenBracket,
+    //	    NumLit(42.0),
+    //	    CloseBracket,
+    //	]);
+    //	let target = expr!(Func {
+    //	    [Ident("param1"), Ident("param2")],
+    //	    Block {
+    //		NumLit(42.0),
+    //	    }
+    //	});
+    //	assert_eq!(parser.parse(), target);
+    //    }
 }

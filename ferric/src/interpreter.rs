@@ -26,7 +26,7 @@ enum Function {
     Custom {
         args: Rc<[String]>,
         body: Rc<[Expr]>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -185,7 +185,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 "clock" => builtin_clock(self, args),
                 "unix_time" => builtin_unix_time(self, args),
                 "sleep" => builtin_sleep(self, args),
-                x=> panic!("Function {} was not found", x),
+                x => panic!("Function {} was not found", x),
             },
             RuntimeVal::Function(Function::Custom { args, body }) => {
                 let mut res = RuntimeVal::Null;
@@ -193,7 +193,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     res = self.evaluate(expr).expect("Unable to fetch function body"); // TODO: as of 4/13/26, this is just a single block
                 }
                 res
-            },
+            }
             _ => panic!("Invalid function call"),
         })
     }
@@ -256,10 +256,11 @@ impl<'a, W: Write> Interpreter<'a, W> {
             Expr::VarSet { value, slot } => {
                 self.var_storage[*slot] = self.evaluate(value)?;
                 RuntimeVal::Null
-            },
-            Expr::Func{params, body} => {
-                RuntimeVal::Function(Function::Custom { args: params.to_owned().into(), body: body.to_owned().into() })
-            },
+            }
+            Expr::Func { params, body } => RuntimeVal::Function(Function::Custom {
+                args: params.to_owned().into(),
+                body: body.to_owned().into(),
+            }),
             Expr::If {
                 cond,
                 then,
@@ -307,7 +308,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 RuntimeVal::Null // temp, TODO: handle .collect()
             }
-            Expr::Func { body, params } => todo!()
+            Expr::Func { body, params } => todo!(),
         })
     }
 

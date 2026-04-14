@@ -93,6 +93,13 @@ fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+fn unary_bool_negate(right: RuntimeVal) -> Res<RuntimeVal> {
+    match right {
+        RuntimeVal::Boolean(b) => Ok(RuntimeVal::Boolean(!b)),
+        _=>Err(RuntimeError::UnaryTypeMismatch),
+    }
+}
+
 fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Number(n) => {

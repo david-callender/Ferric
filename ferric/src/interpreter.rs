@@ -24,7 +24,7 @@ type Res<T> = Result<T, RuntimeError>;
 enum Function {
     BuiltIn(String),
     Custom {
-        args: Rc<str>,
+        args: Rc<[String]>,
         body: Rc<[Expr]>,
     }
 }
@@ -176,8 +176,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn call_function(&mut self, func_name: RuntimeVal, args: Vec<RuntimeVal>) -> Res<RuntimeVal> {
-        Ok(match func_name {
+    fn call_function(&mut self, fn_obj: RuntimeVal, args: Vec<RuntimeVal>) -> Res<RuntimeVal> {
+        Ok(match fn_obj {
             RuntimeVal::Function(Function::BuiltIn(fn_name)) => match fn_name.as_str() {
                 "print" => builtin_print(self, args),
                 "substr" => builtin_substr(self, args),
@@ -185,7 +185,14 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 "clock" => builtin_clock(self, args),
                 "unix_time" => builtin_unix_time(self, args),
                 "sleep" => builtin_sleep(self, args),
-                _ => panic!("Function {} was not found", fn_name),
+                x=> panic!("Function {} was not found", x),
+            },
+            RuntimeVal::Function(Function::Custom { args, body }) => {
+                let mut res = RuntimeVal::Null;
+                for expr in body.iter() {
+                    res = self.evaluate(expr).expect("Unable to fetch function body"); // TODO: as of 4/13/26, this is just a single block
+                }
+                res
             },
             _ => panic!("Invalid function call"),
         })
@@ -249,7 +256,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
             Expr::VarSet { value, slot } => {
                 self.var_storage[*slot] = self.evaluate(value)?;
                 RuntimeVal::Null
-            }
+            },
+            Expr::Func{params, body} => {
+                RuntimeVal::Function(Function::Custom { args: params.to_owned().into(), body: body.to_owned().into() })
+            },
             Expr::If {
                 cond,
                 then,

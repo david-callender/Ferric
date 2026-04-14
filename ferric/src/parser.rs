@@ -79,6 +79,7 @@ pub enum BinaryOp {
 pub enum UnaryOp {
     Negate,
     BitNot,
+    BoolNot,
 }
 
 pub struct Parser<I: Iterator<Item = Result<Lexeme, LexerError>>> {
@@ -255,6 +256,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             let right = self.parse_func_call()?;
             return Ok(Expr::Unary {
                 operation: UnaryOp::BitNot,
+                right: Box::new(right),
+            });
+        } else if self.matches(Token::Bang)? {
+            let right = self.parse_func_call()?;
+            return Ok(Expr::Unary {
+                operation: UnaryOp::BoolNot,
                 right: Box::new(right),
             });
         }

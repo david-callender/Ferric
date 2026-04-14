@@ -100,6 +100,13 @@ fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+fn unary_bool_not(right: RuntimeVal) -> Res<RuntimeVal> {
+    match right {
+        RuntimeVal::Boolean(b) => Ok(RuntimeVal::Boolean(!b)),
+        _ => Err(RuntimeError::UnaryTypeMismatch),
+    }
+}
+
 fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Number(n) => {
@@ -218,6 +225,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 match operation {
                     UnaryOp::Negate => unary_num_negate(right_val)?,
                     UnaryOp::BitNot => unary_bit_not(right_val)?,
+                    UnaryOp::BoolNot => unary_bool_not(right_val)?,
                 }
             }
             Expr::Call { callee, args } => {

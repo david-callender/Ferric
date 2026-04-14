@@ -57,7 +57,7 @@ pub enum Expr {
     Func {
         params: Vec<String>,
         body: Vec<Expr>,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,6 +146,23 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             panic!("{message}");
         };
         Ok(name)
+    }
+
+    // consume_parameters assumes that the initial opening paren has
+    // already been parsed.
+    fn consume_parameters(&mut self) -> Res<Vec<String>> {
+        let mut parameters: Vec<String> = Vec::new();
+        if !self.matches(Token::CloseParen)? {
+            parameters.push(self.consume_ident("Function parameters may only be idents")?);
+            while self.matches(Token::Comma)? {
+                parameters.push(self.consume_ident("Function parameters may only be idents")?);
+            }
+            self.consume(
+                Token::CloseParen,
+                "Unclosed function definition parentheses or missing comma.",
+            )?;
+        }
+        Ok(parameters)
     }
 
     pub fn parse(&mut self) -> Res<(Vec<Expr>, usize)> {
@@ -317,6 +334,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 .map(|slot| Expr::VarGet { slot })
                 .unwrap_or(Expr::Ident(identifier)),
             Token::Let => self.parse_decl()?,
+            Token::Fn => self.parse_func_def()?,
             Token::If => self.parse_if()?,
             Token::OpenBracket => self.parse_block()?,
             Token::While => self.parse_while()?,
@@ -348,6 +366,18 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         };
         self.next_index += 1;
         Ok(expr)
+    }
+
+    fn parse_func_def(&mut self) -> Res<Expr> {
+        self.consume(
+            Token::OpenParen,
+            "Function definition requires an opening parentheses.",
+        )?;
+        let params = self.consume_parameters()?;
+        Ok(Expr::Func {
+            params,
+            body: vec![self.parse_block()?],
+        })
     }
 
     fn parse_if(&mut self) -> Res<Expr> {

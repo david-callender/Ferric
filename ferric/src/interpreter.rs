@@ -103,6 +103,13 @@ fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+fn unary_bool_not(right: RuntimeVal) -> Res<RuntimeVal> {
+    match right {
+        RuntimeVal::Boolean(b) => Ok(RuntimeVal::Boolean(!b)),
+        _ => Err(RuntimeError::UnaryTypeMismatch),
+    }
+}
+
 fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Number(n) => {
@@ -140,7 +147,7 @@ fn operation_greater_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal
 fn operation_less_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 < n2)),
-        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 < s2)),
         _ => Err(RuntimeError::BinaryTypeMismatch),
     }
 }
@@ -148,7 +155,7 @@ fn operation_less_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
 fn operation_geq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 >= n2)),
-        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 >= s2)),
         _ => Err(RuntimeError::BinaryTypeMismatch),
     }
 }
@@ -156,7 +163,7 @@ fn operation_geq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
 fn operation_leq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 <= n2)),
-        (RuntimeVal::String(_), RuntimeVal::String(_)) => todo!(),
+        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 <= s2)),
         _ => Err(RuntimeError::BinaryTypeMismatch),
     }
 }
@@ -228,6 +235,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 match operation {
                     UnaryOp::Negate => unary_num_negate(right_val)?,
                     UnaryOp::BitNot => unary_bit_not(right_val)?,
+                    UnaryOp::BoolNot => unary_bool_not(right_val)?,
                 }
             }
             Expr::Call { callee, args } => {

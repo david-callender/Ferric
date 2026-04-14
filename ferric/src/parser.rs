@@ -79,6 +79,7 @@ pub enum BinaryOp {
 pub enum UnaryOp {
     Negate,
     BitNot,
+    BoolNot,
 }
 
 pub struct Parser<I: Iterator<Item = Result<Lexeme, LexerError>>> {
@@ -146,6 +147,23 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             panic!("{message}");
         };
         Ok(name)
+    }
+
+    // consume_parameters assumes that the initial opening paren has
+    // already been parsed.
+    fn consume_parameters(&mut self) -> Res<Vec<String>> {
+        let mut parameters: Vec<String> = Vec::new();
+        if !self.matches(Token::CloseParen)? {
+            parameters.push(self.consume_ident("Function parameters may only be idents")?);
+            while self.matches(Token::Comma)? {
+                parameters.push(self.consume_ident("Function parameters may only be idents")?);
+            }
+            self.consume(
+                Token::CloseParen,
+                "Unclosed function definition parentheses or missing comma.",
+            )?;
+        }
+        Ok(parameters)
     }
 
     pub fn parse(&mut self) -> Res<(Vec<Expr>, usize)> {
@@ -257,6 +275,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 operation: UnaryOp::BitNot,
                 right: Box::new(right),
             });
+        } else if self.matches(Token::Bang)? {
+            let right = self.parse_func_call()?;
+            return Ok(Expr::Unary {
+                operation: UnaryOp::BoolNot,
+                right: Box::new(right),
+            });
         }
         self.parse_func_call()
     }
@@ -317,6 +341,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 .map(|slot| Expr::VarGet { slot })
                 .unwrap_or(Expr::Ident(identifier)),
             Token::Let => self.parse_decl()?,
+            Token::Fn => self.parse_func_def()?,
             Token::If => self.parse_if()?,
             Token::OpenBracket => self.parse_block()?,
             Token::While => self.parse_while()?,
@@ -348,6 +373,18 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         };
         self.next_index += 1;
         Ok(expr)
+    }
+
+    fn parse_func_def(&mut self) -> Res<Expr> {
+        self.consume(
+            Token::OpenParen,
+            "Function definition requires an opening parentheses.",
+        )?;
+        let params = self.consume_parameters()?;
+        Ok(Expr::Func {
+            params,
+            body: vec![self.parse_block()?],
+        })
     }
 
     fn parse_if(&mut self) -> Res<Expr> {
@@ -719,4 +756,26 @@ mod tests {
 
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
+
+    //    #[test]
+    //    pub fn function_definition() {
+    //	let mut parser = Parser::new(tokens![
+    //	    Fn,
+    //	    OpenParen,
+    //	    Ident("param1".to_string()),
+    //	    Comma,
+    //	    Ident("Param2".to_string()),
+    //	    CloseParen,
+    //	    OpenBracket,
+    //	    NumLit(42.0),
+    //	    CloseBracket,
+    //	]);
+    //	let target = expr!(Func {
+    //	    [Ident("param1"), Ident("param2")],
+    //	    Block {
+    //		NumLit(42.0),
+    //	    }
+    //	});
+    //	assert_eq!(parser.parse(), target);
+    //    }
 }

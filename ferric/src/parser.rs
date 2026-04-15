@@ -381,6 +381,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             "Function definition requires an opening parentheses.",
         )?;
         let params = self.consume_parameters()?;
+        self.consume(
+            Token::OpenBracket,
+            "Function definition requires an opening bracket.",
+        )?;
         Ok(Expr::Func {
             params,
             body: vec![self.parse_block()?],

@@ -1,4 +1,5 @@
-let i = "
-multiline string
-";
-while i < 100 {};
+let x = fn (a, b) {
+    print(a);
+    print(b);
+};
+x("test");

@@ -22,11 +22,11 @@ pub enum RuntimeError {
 type Res<T> = Result<T, RuntimeError>;
 
 #[derive(Debug, Clone, PartialEq)]
-enum Function {
+pub enum Function {
     BuiltIn(String),
     Custom {
         param_count: usize,
-        body: Rc<Expr>,
+        body: Rc<[Expr]>,
         closure: Environment,
     },
 }
@@ -59,7 +59,7 @@ struct EnvLevel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Environment(Rc<RefCell<EnvLevel>>);
+pub struct Environment(Rc<RefCell<EnvLevel>>);
 
 impl Environment {
     fn new_global() -> Self {
@@ -270,10 +270,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     func_env.declare(arg);
                 }
 
-                match body.as_ref() {
-                    Expr::Block(b) => self.evaluate_block(b, func_env)?,
-                    _ => unreachable!("did not find body"),
-                }
+                self.evaluate_block(body.as_ref(), func_env)?
             }
             _ => panic!("Invalid function call"),
         })
@@ -281,18 +278,18 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
     fn evaluate_block(
         &mut self,
-        expressions: &Vec<Expr>,
+        expressions: &[Expr],
         new_env: Environment,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    ) -> Res<RuntimeVal> {
         let old_env = self.env.clone();
         self.env = new_env;
         // returns Null on empty block
         let mut last_val = RuntimeVal::Null;
         for exp in expressions {
-            last_val = self.evaluate(&exp)?;
+            last_val = self.evaluate(exp)?;
         }
         self.env = old_env;
-        Result::Ok(last_val)
+        Ok(last_val)
     }
 
     // evalute -> condense tree -> runTimeVal
@@ -369,7 +366,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 match eval_cond {
                     RuntimeVal::Boolean(b) => {
                         if b {
-                            self.evaluate(then)?
+                            self.evaluate_block(then, Environment::new(self.env.clone()))?
                         } else if let Some(ow_branch) = otherwise {
                             self.evaluate(ow_branch)?
                         } else {
@@ -392,7 +389,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 };
 
                 while while_cond {
-                    self.evaluate(body)?;
+                    self.evaluate_block(body, Environment::new(self.env.clone()))?;
 
                     while_cond = match self.evaluate(cond)? {
                         RuntimeVal::Boolean(b) => b,

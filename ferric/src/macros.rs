@@ -81,24 +81,24 @@ macro_rules! expr {
     (Block{$($ln:ident$l:tt),* $(,)?}) => {
         Expr::Block(vec![$(expr!($ln$l)),*])
     };
-    (If{$cn:ident$c:tt, $tn:ident$t:tt, None}) => {
+    (If{$cn:ident$c:tt, Block{$($tn:ident$t:tt),* $(,)?}, None}) => {
         Expr::If {
             cond: Box::new(expr!($cn$c)),
-            then: Box::new(expr!($tn$t)),
+            then: vec![$(expr!($tn$t)),*],
             otherwise: None,
         }
     };
-    (If{$cn:ident$c:tt, $tn:ident$t:tt, $on:ident$o:tt}) => {
+    (If{$cn:ident$c:tt, Block{$($tn:ident$t:tt),* $(,)?}, $on:ident$o:tt}) => {
         Expr::If {
             cond: Box::new(expr!($cn$c)),
-            then: Box::new(expr!($tn$t)),
+            then: vec![$(expr!($tn$t)),*],
             otherwise: Some(Box::new(expr!($on$o))),
         }
     };
-    (While{$cn:ident$c:tt, $bn:ident$b:tt}) => {
+    (While{$cn:ident$c:tt, Block{$($bn:ident$b:tt),* $(,)?}}) => {
         Expr::While {
             cond: Box::new(expr!($cn$c)),
-            body: Box::new(expr!($bn$b)),
+            body: vec![$(expr!($bn$b)),*],
         }
     };
 }

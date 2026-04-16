@@ -48,16 +48,16 @@ pub enum Expr {
     Block(Vec<Expr>),
     If {
         cond: Box<Expr>,
-        then: Box<Expr>,
+        then: Vec<Expr>,
         otherwise: Option<Box<Expr>>,
     },
     While {
         cond: Box<Expr>,
-        body: Box<Expr>,
+        body: Vec<Expr>,
     },
     Func {
         param_count: usize,
-        body: Box<Expr>,
+        body: Vec<Expr>,
     },
 }
 
@@ -362,7 +362,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::Let => self.parse_decl()?,
             Token::Fn => self.parse_func_def()?,
             Token::If => self.parse_if()?,
-            Token::OpenBracket => self.parse_block(EnvStackFrame::new())?,
+            Token::OpenBracket => Expr::Block(self.parse_block(EnvStackFrame::new())?),
             Token::While => self.parse_while()?,
             _ => panic!("expected basic token, got non-basic token {}", token.t),
         };
@@ -406,7 +406,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         )?;
         Ok(Expr::Func {
             param_count,
-            body: Box::new(self.parse_block(frame)?),
+            body: self.parse_block(frame)?,
         })
     }
 
@@ -418,7 +418,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
         let otherwise = if self.matches(Token::Otherwise)? {
             let otherwise = if self.matches(Token::OpenBracket)? {
-                self.parse_block(EnvStackFrame::new())?
+                Expr::Block(self.parse_block(EnvStackFrame::new())?)
             } else if self.matches(Token::If)? {
                 self.parse_if()?
             } else {
@@ -432,7 +432,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
         Ok(Expr::If {
             cond: Box::new(cond),
-            then: Box::new(then),
+            then,
             otherwise,
         })
     }
@@ -440,14 +440,14 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     fn parse_while(&mut self) -> Res<Expr> {
         let cond = Box::new(self.parse_expr()?);
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
-        let body = Box::new(self.parse_block(EnvStackFrame::new())?);
+        let body = self.parse_block(EnvStackFrame::new())?;
         Ok(Expr::While { cond, body })
     }
 
     // assumes the leading Token::OpenBracket has already been consumed.
-    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<Expr> {
+    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<Vec<Expr>> {
         if self.matches(Token::CloseBracket)? {
-            return Ok(Expr::Block(vec![]));
+            return Ok(vec![]);
         }
 
         // each block creates its own scope, so add a blank scope to the
@@ -459,7 +459,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             if self.matches(Token::CloseBracket)? {
                 exprs.push(Expr::Literal(RuntimeVal::Null));
                 self.env.pop().expect("misaligned environment stack");
-                return Ok(Expr::Block(exprs));
+                return Ok(exprs);
             }
             exprs.push(self.parse_expr()?);
         }
@@ -468,7 +468,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             "Expected '}' after block. Check for a missing semicolon on the previous line",
         )?;
         self.env.pop().expect("misaligned environment stack");
-        Ok(Expr::Block(exprs))
+        Ok(exprs)
     }
 }
 

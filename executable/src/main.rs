@@ -12,11 +12,11 @@ fn ferric_main(source: String) -> Result<(), FerricError> {
     let lexer = Lexer::new(stream.stream(), src.clone());
 
     let mut parser = Parser::new(lexer);
-    let (expr, var_storage_size) = parser.parse()?;
+    let expr = parser.parse()?;
 
     let mut output = stdout();
 
-    let mut interpreter = Interpreter::new(&mut output, var_storage_size);
+    let mut interpreter = Interpreter::new(&mut output);
     interpreter.interpret(&expr)?;
 
     Ok(())

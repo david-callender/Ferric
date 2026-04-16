@@ -167,13 +167,13 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(parameters)
     }
 
-    pub fn parse(&mut self) -> Res<(Vec<Expr>, usize)> {
+    pub fn parse(&mut self) -> Res<Vec<Expr>> {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
             exprs.push(self.parse_expr()?);
             self.consume(Token::Semi, "Expected ';' after expression")?;
         }
-        Ok((exprs, self.next_index))
+        Ok(exprs)
     }
 
     fn parse_expr(&mut self) -> Res<Expr> {

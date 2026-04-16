@@ -41,9 +41,9 @@ pub enum Expr {
         slot: usize,
     },
     VarSet {
+        value: Box<Expr>,
         depth: usize,
         slot: usize,
-        value: Box<Expr>,
     },
     Block(Vec<Expr>),
     If {
@@ -209,8 +209,8 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
             return Ok(Expr::VarSet {
                 value: Box::new(right),
-                slot,
                 depth,
+                slot,
             });
         }
         Ok(left)

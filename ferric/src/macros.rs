@@ -60,20 +60,21 @@ macro_rules! expr {
             args: vec![$(expr!($an$a)),*],
         }
     };
-    (Decl($vn:ident$v:tt, $slot:expr)) => {
+    (Decl($vn:ident$v:tt)) => {
         Expr::Decl {
             value: Box::new(expr!($vn$v)),
-            slot: $slot,
         }
     };
-    (VarGet($slot:expr)) => {
+    (VarGet($slot:expr, $depth:expr)) => {
         Expr::VarGet {
+            depth: $depth,
             slot: $slot,
         }
     };
-    (VarSet($vn:ident$v:tt, $slot:expr)) => {
+    (VarSet($vn:ident$v:tt, $depth:expr, $slot:expr)) => {
         Expr::VarSet {
             value: Box::new(expr!($vn$v)),
+            depth: $depth,
             slot: $slot,
         }
     };

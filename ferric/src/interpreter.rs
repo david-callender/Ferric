@@ -348,7 +348,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 RuntimeVal::Null
             }
             Expr::VarGet { depth, slot } => self.env.get(*depth, *slot),
-            Expr::VarSet { depth, slot, value } => {
+            Expr::VarSet { value, depth, slot } => {
                 let val = self.evaluate(value)?;
                 self.env.set(*depth, *slot, val);
                 RuntimeVal::Null
@@ -548,7 +548,7 @@ mod tests {
 
         let expr = Expr::Literal(RuntimeVal::Number(5.0));
 
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
         let res = interpreter.evaluate(&expr).unwrap();
 
         assert_eq!(res, RuntimeVal::Number(5.0));
@@ -563,7 +563,7 @@ mod tests {
             expr!(Call(Ident("print"), [NumLit(5.0)])),
         ];
 
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
         interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"4\n5\n");
@@ -589,7 +589,7 @@ mod tests {
             )]
         ))];
 
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
         interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"bar\n");
@@ -598,7 +598,7 @@ mod tests {
     #[test]
     fn binary_ops_int() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
         let expr = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
         assert_eq!(
@@ -634,7 +634,7 @@ mod tests {
     #[test]
     fn binary_ops_bool() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
         let expr = expr!(Binary(NumLit(4.0), GreaterThan, NumLit(5.0)));
         assert_eq!(
@@ -677,7 +677,7 @@ mod tests {
     fn unary_int() {
         // bit not on numbers
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
         let expr = expr!(Unary(BitNot, NumLit(0.0)));
         assert_eq!(
@@ -698,53 +698,62 @@ mod tests {
         );
     }
 
-    /*
     #[test]
     fn unary_num_() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        let expr = expr!(Unary(Negate, BoolLit(true)));
-        assert_eq!(interpreter.evaluate(&expr).unwrap(), RuntimeVal::Boolean(false));
+        let expr = expr!(Unary(BoolNot, BoolLit(true)));
+        assert_eq!(
+            interpreter.evaluate(&expr).unwrap(),
+            RuntimeVal::Boolean(false)
+        );
 
-        let expr = expr!(Unary(Negate, BoolLit(false)));
-        assert_eq!(interpreter.evaluate(&expr).unwrap(), RuntimeVal::Boolean(true));
+        let expr = expr!(Unary(BoolNot, BoolLit(false)));
+        assert_eq!(
+            interpreter.evaluate(&expr).unwrap(),
+            RuntimeVal::Boolean(true)
+        );
     }
-    */
 
     #[test]
     fn test_var_set() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 1);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        let expr = vec![expr!(Decl(NumLit(4.0), 0)), expr!(VarSet(NumLit(5.0), 0))];
+        let expr = expr!(Block {
+            Decl(NumLit(4.0)),
+            VarSet(NumLit(5.0), 0, 0),
+            VarGet(0, 0)
+        });
 
-        interpreter.interpret(&expr).unwrap();
-
-        assert_eq!(interpreter.var_storage[0], RuntimeVal::Number(5.0));
+        assert_eq!(
+            interpreter.evaluate(&expr).unwrap(),
+            RuntimeVal::Number(5.0)
+        );
     }
 
     #[test]
     fn clock() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 1);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        let test = vec![
-            expr!(Call(Ident("sleep"), [NumLit(1.0)])),
-            expr!(Decl(Call(Ident("clock"), []), 0)),
-        ];
-        let eps = 0.012; // margin of time for program to run after sleep
+        let expr = expr!(Block {
+            Call(Ident("sleep"), [NumLit(1.0)]),
+            Decl(Call(Ident("clock"), [])),
+            VarGet(0, 0),
+        });
 
-        interpreter.interpret(&test).unwrap();
-        if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
-            assert!(
-                eps > (c - 1.0).abs(),
-                "clock ran longer than expected! {}",
-                c - 1.0
-            );
-        } else {
-            panic!("declared variable was not a number!");
-        }
+        let eps = 0.1; // margin of time for program to run after sleep
+
+        let RuntimeVal::Number(c) = interpreter.evaluate(&expr).unwrap() else {
+            panic!("invalid type returned")
+        };
+        assert!(
+            eps > (c - 1.0).abs(),
+            "sleep ran {}s longer than expected",
+            c - 1.0
+        );
     }
 
     #[test]
@@ -752,18 +761,19 @@ mod tests {
         let mut out = sink();
 
         let eps = 1.0;
-        let test = vec![expr!(Decl(Call(Ident("unix_time"), []), 0))];
+        let expr = expr!(Call(Ident("unix_time"), []));
 
-        let mut interpreter = Interpreter::new(&mut out, 1);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        interpreter.interpret(&test).unwrap();
-        let RuntimeVal::Number(c) = interpreter.var_storage[0] else {
-            panic!("invalid var in var_storage")
+        interpreter.evaluate(&expr).unwrap();
+        let RuntimeVal::Number(c) = interpreter.evaluate(&expr).unwrap() else {
+            panic!("invalid type returned")
         };
         let elapsed = Utc::now() - (DateTime::UNIX_EPOCH);
         assert!(
             c - elapsed.as_seconds_f64() < eps,
-            "unix time not reported correctly"
+            "unix time not reported correctly (delta: {})",
+            c - elapsed.as_seconds_f64()
         );
     }
 }

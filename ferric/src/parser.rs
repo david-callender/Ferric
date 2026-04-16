@@ -193,7 +193,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             return Ok(Expr::VarSet {
                 value: Box::new(right),
                 slot,
-                depth: todo!()
+                depth: todo!(),
             });
         }
         Ok(left)
@@ -340,7 +340,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::False => Expr::Literal(RuntimeVal::Boolean(false)),
             Token::Ident(identifier) => self
                 .find_var(&identifier)
-                .map(|slot| Expr::VarGet { slot, depth: todo!() })
+                .map(|slot| Expr::VarGet {
+                    slot,
+                    depth: todo!(),
+                })
                 .unwrap_or(Expr::Ident(identifier)),
             Token::Let => self.parse_decl()?,
             Token::Fn => self.parse_func_def()?,
@@ -387,7 +390,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         )?;
         Ok(Expr::Func {
             param_count: todo!(),
-            body: todo!() // vec![self.parse_block()?],
+            body: todo!(), // vec![self.parse_block()?],
         })
     }
 

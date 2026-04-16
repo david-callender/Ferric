@@ -83,18 +83,35 @@ pub enum UnaryOp {
     BoolNot,
 }
 
+#[derive(Default)]
+pub struct EnvStackFrame {
+    next_index: usize,
+    frame: HashMap<String, usize>,
+}
+
 pub struct Parser<I: Iterator<Item = Result<Lexeme, LexerError>>> {
     stream: Peekable<I>,
-    next_index: usize,
-    env: Vec<HashMap<String, usize>>,
+    env: Vec<EnvStackFrame>,
+}
+
+impl EnvStackFrame {
+    pub fn new() -> Self {
+        EnvStackFrame::default()
+    }
+    pub fn insert(&mut self, name: String) {
+        self.frame.insert(name, self.next_index);
+        self.next_index += 1;
+    }
+    pub fn get(&self, key: &str) -> Option<usize> {
+        Some(*self.frame.get(key)?)
+    }
 }
 
 impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     pub fn new<II: IntoIterator<IntoIter = I>>(stream: II) -> Self {
         Self {
             stream: stream.into_iter().peekable(),
-            next_index: 0,
-            env: vec![HashMap::new()], // global
+            env: vec![EnvStackFrame::new()], // global
         }
     }
 
@@ -193,7 +210,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             return Ok(Expr::VarSet {
                 value: Box::new(right),
                 slot,
-                depth: todo!()
+                depth,
             });
         }
         Ok(left)
@@ -321,10 +338,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(func_call)
     }
 
-    fn find_var(&self, name: &String) -> Option<usize> {
-        for level in self.env.iter().rev() {
-            if let Some(index) = level.get(name) {
-                return Some(*index);
+    fn find_var(&self, name: &String) -> Option<(usize, usize)> {
+        for (depth, stack_frame) in self.env.iter().rev().enumerate() {
+            if let Some(index) = stack_frame.get(name) {
+                return Some((depth, index));
             }
         }
         None
@@ -340,12 +357,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::False => Expr::Literal(RuntimeVal::Boolean(false)),
             Token::Ident(identifier) => self
                 .find_var(&identifier)
-                .map(|slot| Expr::VarGet { slot, depth: todo!() })
+                .map(|(depth, slot)| Expr::VarGet { depth, slot })
                 .unwrap_or(Expr::Ident(identifier)),
             Token::Let => self.parse_decl()?,
             Token::Fn => self.parse_func_def()?,
             Token::If => self.parse_if()?,
-            Token::OpenBracket => self.parse_block()?,
+            Token::OpenBracket => self.parse_block(EnvStackFrame::new())?,
             Token::While => self.parse_while()?,
             _ => panic!("expected basic token, got non-basic token {}", token.t),
         };
@@ -365,10 +382,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         let name = self.consume_ident("Expected variable name after let")?;
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
-        self.env
-            .last_mut()
-            .expect("no global env")
-            .insert(name, self.next_index);
+        self.env.last_mut().expect("no global env").insert(name);
         let expr = Expr::Decl {
             value: Box::new(init),
         };
@@ -381,13 +395,18 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             "Function definition requires an opening parentheses.",
         )?;
         let params = self.consume_parameters()?;
+        let param_count = params.len();
+        let mut frame = EnvStackFrame::new();
+        for param in params {
+            frame.insert(param);
+        }
         self.consume(
             Token::OpenBracket,
             "Function definition requires an opening bracket.",
         )?;
         Ok(Expr::Func {
-            param_count: todo!(),
-            body: todo!() // vec![self.parse_block()?],
+            param_count,
+            body: Box::new(self.parse_block(frame)?),
         })
     }
 
@@ -395,11 +414,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         let cond = self.parse_expr()?;
         self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
-        let then = self.parse_block()?;
+        let then = self.parse_block(EnvStackFrame::new())?;
 
         let otherwise = if self.matches(Token::Otherwise)? {
             let otherwise = if self.matches(Token::OpenBracket)? {
-                self.parse_block()?
+                self.parse_block(EnvStackFrame::new())?
             } else if self.matches(Token::If)? {
                 self.parse_if()?
             } else {
@@ -421,19 +440,19 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     fn parse_while(&mut self) -> Res<Expr> {
         let cond = Box::new(self.parse_expr()?);
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
-        let body = Box::new(self.parse_block()?);
+        let body = Box::new(self.parse_block(EnvStackFrame::new())?);
         Ok(Expr::While { cond, body })
     }
 
     // assumes the leading Token::OpenBracket has already been consumed.
-    fn parse_block(&mut self) -> Res<Expr> {
+    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<Expr> {
         if self.matches(Token::CloseBracket)? {
             return Ok(Expr::Block(vec![]));
         }
 
         // each block creates its own scope, so add a blank scope to the
         // environment stack.
-        self.env.push(HashMap::new());
+        self.env.push(frame);
 
         let mut exprs = vec![self.parse_expr()?];
         while self.matches(Token::Semi)? {

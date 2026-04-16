@@ -35,14 +35,15 @@ pub enum Expr {
     },
     Decl {
         value: Box<Expr>,
-        slot: usize,
     },
     VarGet {
+        depth: usize,
         slot: usize,
     },
     VarSet {
-        value: Box<Expr>,
+        depth: usize,
         slot: usize,
+        value: Box<Expr>,
     },
     Block(Vec<Expr>),
     If {
@@ -55,8 +56,8 @@ pub enum Expr {
         body: Box<Expr>,
     },
     Func {
-        params: Vec<String>,
-        body: Vec<Expr>,
+        param_count: usize,
+        body: Box<Expr>,
     },
 }
 
@@ -185,13 +186,14 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         if self.matches(Token::Eq)? {
             let right = self.parse_comparisons()?;
 
-            let Expr::VarGet { slot } = left else {
+            let Expr::VarGet { slot, depth } = left else {
                 panic!("Expected variable name to be an identifier");
             };
 
             return Ok(Expr::VarSet {
                 value: Box::new(right),
                 slot,
+                depth: todo!()
             });
         }
         Ok(left)
@@ -338,7 +340,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::False => Expr::Literal(RuntimeVal::Boolean(false)),
             Token::Ident(identifier) => self
                 .find_var(&identifier)
-                .map(|slot| Expr::VarGet { slot })
+                .map(|slot| Expr::VarGet { slot, depth: todo!() })
                 .unwrap_or(Expr::Ident(identifier)),
             Token::Let => self.parse_decl()?,
             Token::Fn => self.parse_func_def()?,
@@ -369,9 +371,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             .insert(name, self.next_index);
         let expr = Expr::Decl {
             value: Box::new(init),
-            slot: self.next_index,
         };
-        self.next_index += 1;
         Ok(expr)
     }
 
@@ -386,8 +386,8 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             "Function definition requires an opening bracket.",
         )?;
         Ok(Expr::Func {
-            params,
-            body: vec![self.parse_block()?],
+            param_count: todo!(),
+            body: todo!() // vec![self.parse_block()?],
         })
     }
 

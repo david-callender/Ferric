@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::{fmt::Display, io::Write};
 
@@ -47,6 +48,68 @@ impl Display for RuntimeVal {
             Self::Function(n) => write!(f, "function"),
             Self::Null => write!(f, "Null"),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct EnvLevel {
+    parent: Option<Rc<RefCell<EnvLevel>>>,
+    vars: Vec<RuntimeVal>,
+}
+
+#[derive(Debug, Clone)]
+struct Environment(Rc<RefCell<EnvLevel>>);
+
+impl Environment {
+    fn new_global() -> Self {
+        Self(Rc::new(RefCell::new(EnvLevel {
+            parent: None,
+            vars: vec![],
+        })))
+    }
+    fn new(parent: Self) -> Self {
+        Self(Rc::new(RefCell::new(EnvLevel {
+            parent: Some(parent.0),
+            vars: vec![],
+        })))
+    }
+
+    fn decendent(&self, times: usize) -> Self {
+        let mut env = self.0.clone();
+        for _ in 0..times {
+            let a = env
+                .borrow()
+                .parent
+                .clone()
+                .expect("depth was too large for current env");
+            env = a;
+        }
+
+        Self(env)
+    }
+
+    fn get(&self, depth: usize, slot: usize) -> RuntimeVal {
+        let desc = self.decendent(depth);
+        let frame = desc
+            .0
+            .borrow();
+        frame.vars.get(slot)
+            .unwrap_or_else(|| panic!("depth: {depth}, slot: {slot}"))
+            .clone()
+    }
+
+    fn declare(&self, value: RuntimeVal) {
+        self.0.borrow_mut().vars.push(value);
+    }
+
+    fn set(&self, depth: usize, slot: usize, value: RuntimeVal) {
+        *self
+            .decendent(depth)
+            .0
+            .borrow_mut()
+            .vars
+            .get_mut(slot)
+            .unwrap() = value;
     }
 }
 
@@ -251,7 +314,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 // check if function exists
                 RuntimeVal::Function(Function::BuiltIn(name.clone()))
             }
-            Expr::Decl { value, slot } => {
+            Expr::Decl { value } => {
+                
+                let slot: &usize = todo!();
+                
                 let val = self.evaluate(value)?;
                 let var = self
                     .var_storage
@@ -260,14 +326,14 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 *var = val;
                 RuntimeVal::Null
             }
-            Expr::VarGet { slot } => self.var_storage[*slot].clone(),
-            Expr::VarSet { value, slot } => {
+            Expr::VarGet { depth, slot  } => self.var_storage[*slot].clone(),
+            Expr::VarSet { depth, slot, value } => {
                 self.var_storage[*slot] = self.evaluate(value)?;
                 RuntimeVal::Null
             }
-            Expr::Func { params, body } => RuntimeVal::Function(Function::Custom {
-                args: params.to_owned().into(),
-                body: body.to_owned().into(),
+            Expr::Func { param_count, body } => RuntimeVal::Function(Function::Custom {
+                args: todo!(), // params.to_owned().into(),
+                body: todo!(), // body.to_owned().into(),
             }),
             Expr::If {
                 cond,
@@ -316,7 +382,6 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 RuntimeVal::Null // temp, TODO: handle .collect()
             }
-            Expr::Func { body, params } => todo!(),
         })
     }
 

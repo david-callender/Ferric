@@ -46,7 +46,7 @@ impl Display for RuntimeVal {
             Self::Number(n) => write!(f, "{n}"),
             Self::String(s) => write!(f, "{s}"),
             Self::Boolean(b) => write!(f, "{b}"),
-            Self::Function(n) => write!(f, "function"),
+            Self::Function(_) => write!(f, "function"),
             Self::Null => write!(f, "Null"),
         }
     }
@@ -160,6 +160,7 @@ fn operation_modulo(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Number(n) => Ok(RuntimeVal::Number(-n)),
@@ -167,6 +168,7 @@ fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn unary_bool_not(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Boolean(b) => Ok(RuntimeVal::Boolean(!b)),
@@ -174,6 +176,7 @@ fn unary_bool_not(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Number(n) => {
@@ -184,6 +187,7 @@ fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::float_cmp)]
 fn operation_equal(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 == n2)),
@@ -192,6 +196,7 @@ fn operation_equal(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::float_cmp)]
 fn operation_neq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 != n2)),
@@ -256,7 +261,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 "clock" => builtin_clock(self, args),
                 "unix_time" => builtin_unix_time(self, args),
                 "sleep" => builtin_sleep(self, args),
-                x => panic!("Function {} was not found", x),
+                x => panic!("Function {x} was not found"),
             },
             RuntimeVal::Function(Function::Custom {
                 param_count,
@@ -276,11 +281,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         })
     }
 
-    fn evaluate_block(
-        &mut self,
-        expressions: &[Expr],
-        new_env: Environment,
-    ) -> Res<RuntimeVal> {
+    fn evaluate_block(&mut self, expressions: &[Expr], new_env: Environment) -> Res<RuntimeVal> {
         let old_env = self.env.clone();
         self.env = new_env;
         // returns Null on empty block
@@ -379,9 +380,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 }
             }
             Expr::Block(expressions) => {
-                let last_val =
-                    self.evaluate_block(expressions, Environment::new(self.env.clone()))?;
-                last_val
+                self.evaluate_block(expressions, Environment::new(self.env.clone()))?
             }
             Expr::While { cond, body } => {
                 let RuntimeVal::Boolean(mut while_cond) = self.evaluate(cond)? else {
@@ -429,7 +428,8 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     RuntimeVal::Null
 }
 
-fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_substr<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 3,
         "substr(): Expect 3 args, got {}",
@@ -455,24 +455,23 @@ fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -
         );
         assert!(
             start < string.len() as i64,
-            "substr(): String starting index out of bounds: {}",
-            start
+            "substr(): String starting index out of bounds: {start}"
         );
         assert!(
             end <= string.len() as i64,
-            "substr(): String ending index out of bounds: {}",
-            end
+            "substr(): String ending index out of bounds: {end}"
         );
 
         return RuntimeVal::String(string[(start as usize)..(end as usize)].to_string());
     }
     panic!(
         "substr(): Cannot take substring of non-string object: {}",
-        &args[0]
+        args[0]
     );
 }
 
-fn builtin_len<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_len<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 1,
         "len(): Expect 1 argument, got {}",
@@ -484,6 +483,7 @@ fn builtin_len<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> R
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.is_empty(),
@@ -494,7 +494,8 @@ fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     RuntimeVal::Number((Utc::now() - i.start_time).as_seconds_f64())
 }
 
-fn builtin_unix_time<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_unix_time<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.is_empty(),
         "unix_time: expected 0 args, got {}",
@@ -504,7 +505,8 @@ fn builtin_unix_time<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>
     RuntimeVal::Number((Utc::now() - DateTime::UNIX_EPOCH).as_seconds_f64())
 }
 
-fn builtin_sleep<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_sleep<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 1,
         "sleep(): expected 1 args, got {}",

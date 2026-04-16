@@ -130,6 +130,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     fn matches(&mut self, expected: Token) -> Res<bool> {
         if self.peek()?.is_some_and(|x| x.t == expected) {
+            drop(expected);
             let _ = self.next()?.unwrap();
             Ok(true)
         } else {
@@ -338,7 +339,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(func_call)
     }
 
-    fn find_var(&self, name: &String) -> Option<(usize, usize)> {
+    fn find_var(&self, name: &str) -> Option<(usize, usize)> {
         for (depth, stack_frame) in self.env.iter().rev().enumerate() {
             if let Some(index) = stack_frame.get(name) {
                 return Some((depth, index));

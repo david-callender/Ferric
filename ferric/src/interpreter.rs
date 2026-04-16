@@ -25,8 +25,9 @@ type Res<T> = Result<T, RuntimeError>;
 enum Function {
     BuiltIn(String),
     Custom {
-        args: Rc<[String]>,
-        body: Rc<[Expr]>,
+        param_count: usize,
+        body: Rc<Expr>,
+        closure: Environment,
     },
 }
 
@@ -51,13 +52,13 @@ impl Display for RuntimeVal {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct EnvLevel {
     parent: Option<Rc<RefCell<EnvLevel>>>,
     vars: Vec<RuntimeVal>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct Environment(Rc<RefCell<EnvLevel>>);
 
 impl Environment {
@@ -90,10 +91,10 @@ impl Environment {
 
     fn get(&self, depth: usize, slot: usize) -> RuntimeVal {
         let desc = self.decendent(depth);
-        let frame = desc
-            .0
-            .borrow();
-        frame.vars.get(slot)
+        let frame = desc.0.borrow();
+        frame
+            .vars
+            .get(slot)
             .unwrap_or_else(|| panic!("depth: {depth}, slot: {slot}"))
             .clone()
     }
@@ -233,7 +234,7 @@ fn operation_leq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
 
 pub struct Interpreter<'a, W: Write> {
     output: &'a mut W,
-    var_storage: Vec<RuntimeVal>,
+    env: Environment,
     start_time: DateTime<Utc>,
 }
 
@@ -241,7 +242,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
     pub fn new(output: &'a mut W) -> Self {
         Self {
             output,
-            var_storage: vec![RuntimeVal::Null; todo!()],
+            env: Environment::new_global(),
             start_time: Utc::now(),
         }
     }
@@ -257,15 +258,41 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 "sleep" => builtin_sleep(self, args),
                 x => panic!("Function {} was not found", x),
             },
-            RuntimeVal::Function(Function::Custom { args, body }) => {
-                let mut res = RuntimeVal::Null;
-                for expr in body.iter() {
-                    res = self.evaluate(expr).expect("Unable to fetch function body"); // TODO: as of 4/13/26, this is just a single block
+            RuntimeVal::Function(Function::Custom {
+                param_count,
+                body,
+                closure,
+            }) => {
+                assert!(param_count == args.len());
+                let func_env = Environment::new(closure);
+
+                for arg in args {
+                    func_env.declare(arg);
                 }
-                res
+
+                match body.as_ref() {
+                    Expr::Block(b) => self.evaluate_block(b, func_env)?,
+                    _ => unreachable!("did not find body"),
+                }
             }
             _ => panic!("Invalid function call"),
         })
+    }
+
+    fn evaluate_block(
+        &mut self,
+        expressions: &Vec<Expr>,
+        new_env: Environment,
+    ) -> Result<RuntimeVal, RuntimeError> {
+        let old_env = self.env.clone();
+        self.env = new_env;
+        // returns Null on empty block
+        let mut last_val = RuntimeVal::Null;
+        for exp in expressions {
+            last_val = self.evaluate(&exp)?;
+        }
+        self.env = old_env;
+        Result::Ok(last_val)
     }
 
     // evalute -> condense tree -> runTimeVal
@@ -315,26 +342,24 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 RuntimeVal::Function(Function::BuiltIn(name.clone()))
             }
             Expr::Decl { value } => {
-                
-                let slot: &usize = todo!();
-                
                 let val = self.evaluate(value)?;
-                let var = self
-                    .var_storage
-                    .get_mut(*slot)
-                    .expect("Unable to fetch variable");
-                *var = val;
+                self.env.declare(val);
+
                 RuntimeVal::Null
             }
-            Expr::VarGet { depth, slot  } => self.var_storage[*slot].clone(),
+            Expr::VarGet { depth, slot } => self.env.get(*depth, *slot),
             Expr::VarSet { depth, slot, value } => {
-                self.var_storage[*slot] = self.evaluate(value)?;
+                let val = self.evaluate(value)?;
+                self.env.set(*depth, *slot, val);
                 RuntimeVal::Null
             }
-            Expr::Func { param_count, body } => RuntimeVal::Function(Function::Custom {
-                args: todo!(), // params.to_owned().into(),
-                body: todo!(), // body.to_owned().into(),
-            }),
+            Expr::Func { param_count, body } => {
+                RuntimeVal::Function(Function::Custom {
+                    param_count: *param_count,
+                    body: body.to_owned().into(), // body.to_owned().into(),
+                    closure: self.env.clone(),
+                })
+            }
             Expr::If {
                 cond,
                 then,
@@ -357,11 +382,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 }
             }
             Expr::Block(expressions) => {
-                // returns Null on empty block
-                let mut last_val = RuntimeVal::Null;
-                for exp in expressions {
-                    last_val = self.evaluate(exp)?;
-                }
+                let last_val =
+                    self.evaluate_block(expressions, Environment::new(self.env.clone()))?;
                 last_val
             }
             Expr::While { cond, body } => {

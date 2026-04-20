@@ -5,6 +5,7 @@ use thiserror::Error;
 use crate::{
     interpreter::RuntimeVal,
     lexer::{Lexeme, LexerError, Token},
+    loc::Span,
 };
 
 #[derive(Debug, Clone, Error)]
@@ -17,7 +18,7 @@ pub enum ParserError {
 type Res<T> = Result<T, ParserError>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub enum ExprKind {
     Literal(RuntimeVal),
     Ident(String),
     Binary {
@@ -59,6 +60,35 @@ pub enum Expr {
         param_count: usize,
         body: Vec<Expr>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Expr {
+    kind: ExprKind,
+    span: Span,
+}
+
+impl Expr {
+    fn binary(left: Expr, operation: BinaryOp, right: Expr) -> Self {
+        Expr {
+            span: left.span + right.span,
+            kind: ExprKind::Binary {
+                left: Box::new(left),
+                operation,
+                right: Box::new(right),
+            },
+        }
+    }
+
+    fn unary(operation: UnaryOp, op_span: Span, right: Expr) -> Self {
+        Expr {
+            span: op_span + right.span,
+            kind: ExprKind::Unary {
+                operation,
+                right: Box::new(right),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,13 +158,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn matches(&mut self, expected: Token) -> Res<bool> {
+    fn matches(&mut self, expected: Token) -> Res<Option<Lexeme>> {
         if self.peek()?.is_some_and(|x| x.t == expected) {
             drop(expected);
-            let _ = self.next()?.unwrap();
-            Ok(true)
+            Ok(Some(self.next()?.unwrap()))
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
@@ -150,9 +179,9 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         None
     }
 
-    fn consume(&mut self, expected: Token, message: &str) -> Res<Token> {
-        let token = self.next()?.expect("expected token, got none").t;
-        assert_eq!(token, expected, "{message}");
+    fn consume(&mut self, expected: Token, message: &str) -> Res<Lexeme> {
+        let token = self.next()?.expect("expected token, got none");
+        assert_eq!(token.t, expected, "{message}");
         drop(expected);
         Ok(token)
     }
@@ -172,9 +201,9 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     // already been parsed.
     fn consume_parameters(&mut self) -> Res<Vec<String>> {
         let mut parameters: Vec<String> = Vec::new();
-        if !self.matches(Token::CloseParen)? {
+        if !self.matches(Token::CloseParen)?.is_some() {
             parameters.push(self.consume_ident("Function parameters may only be idents")?);
-            while self.matches(Token::Comma)? {
+            while self.matches(Token::Comma)?.is_some() {
                 parameters.push(self.consume_ident("Function parameters may only be idents")?);
             }
             self.consume(
@@ -201,17 +230,22 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     fn parse_var_set(&mut self) -> Res<Expr> {
         let left = self.parse_comparisons()?;
 
-        if self.matches(Token::Eq)? {
+        if self.matches(Token::Eq)?.is_some() {
             let right = self.parse_comparisons()?;
 
-            let Expr::VarGet { slot, depth } = left else {
+            let ExprKind::VarGet { slot, depth } = left.kind else {
                 panic!("Expected variable name to be an identifier");
             };
 
-            return Ok(Expr::VarSet {
-                value: Box::new(right),
-                depth,
-                slot,
+            let span = left.span + right.span;
+
+            return Ok(Expr {
+                kind: ExprKind::VarSet {
+                    value: Box::new(right),
+                    depth,
+                    slot,
+                },
+                span,
             });
         }
         Ok(left)
@@ -237,30 +271,18 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             None => return Ok(left),
         };
         let right = self.parse_add_subtract()?;
-        Ok(Expr::Binary {
-            left: Box::new(left),
-            operation,
-            right: Box::new(right),
-        })
+        Ok(Expr::binary(left, operation, right))
     }
 
     fn parse_add_subtract(&mut self) -> Res<Expr> {
         let left = self.parse_mult_div_mod()?;
 
-        if self.matches(Token::Plus)? {
+        if self.matches(Token::Plus)?.is_some() {
             let right = self.parse_mult_div_mod()?;
-            return Ok(Expr::Binary {
-                left: Box::new(left),
-                operation: BinaryOp::Add,
-                right: Box::new(right),
-            });
-        } else if self.matches(Token::Minus)? {
+            return Ok(Expr::binary(left, BinaryOp::Add, right));
+        } else if self.matches(Token::Minus)?.is_some() {
             let right = self.parse_mult_div_mod()?;
-            return Ok(Expr::Binary {
-                left: Box::new(left),
-                operation: BinaryOp::Subtract,
-                right: Box::new(right),
-            });
+            return Ok(Expr::binary(left, BinaryOp::Subtract, right));
         }
         Ok(left)
     }
@@ -275,64 +297,58 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             None => return Ok(left),
         };
         let right = self.parse_unary_op()?;
-        Ok(Expr::Binary {
-            left: Box::new(left),
-            operation,
-            right: Box::new(right),
-        })
+        Ok(Expr::binary(left, operation, right))
     }
 
     fn parse_unary_op(&mut self) -> Res<Expr> {
-        if self.matches(Token::Minus)? {
+        if let Some(lexeme) = self.matches(Token::Minus)? {
             let right = self.parse_func_call()?;
-            return Ok(Expr::Unary {
-                operation: UnaryOp::Negate,
-                right: Box::new(right),
-            });
-        } else if self.matches(Token::Tilde)? {
+            return Ok(Expr::unary(UnaryOp::Negate, lexeme.span, right));
+        } else if let Some(lexeme) = self.matches(Token::Tilde)? {
             let right = self.parse_func_call()?;
-            return Ok(Expr::Unary {
-                operation: UnaryOp::BitNot,
-                right: Box::new(right),
-            });
-        } else if self.matches(Token::Bang)? {
+            return Ok(Expr::unary(UnaryOp::BitNot, lexeme.span, right));
+        } else if let Some(lexeme) = self.matches(Token::Bang)? {
             let right = self.parse_func_call()?;
-            return Ok(Expr::Unary {
-                operation: UnaryOp::BoolNot,
-                right: Box::new(right),
-            });
+            return Ok(Expr::unary(UnaryOp::BoolNot, lexeme.span, right));
         }
         self.parse_func_call()
     }
 
     // consume_args also consumes the closing paren of the
     // arguments list, but assumes that the opening paren has
-    // already been parsed.
-    fn consume_args(&mut self) -> Res<Vec<Expr>> {
-        let mut args_vec = vec![];
-
-        if !self.matches(Token::CloseParen)? {
-            args_vec.push(self.parse_expr()?);
-            while self.matches(Token::Comma)? {
+    // already been parsed. Also returns the closing param's span
+    fn consume_args(&mut self) -> Res<(Vec<Expr>, Span)> {
+        Ok(match self.matches(Token::CloseParen)? {
+            Some(close) => (vec![], close.span),
+            None => {
+                let mut args_vec = vec![];
                 args_vec.push(self.parse_expr()?);
+                while self.matches(Token::Comma)?.is_some() {
+                    args_vec.push(self.parse_expr()?);
+                }
+                (
+                    args_vec,
+                    self.consume(
+                        Token::CloseParen,
+                        "Unclosed function call parentheses or missing comma",
+                    )?
+                    .span,
+                )
             }
-            self.consume(
-                Token::CloseParen,
-                "Unclosed function call parentheses or missing comma",
-            )?;
-        }
-
-        Ok(args_vec)
+        })
     }
 
     fn parse_func_call(&mut self) -> Res<Expr> {
         let mut func_call = self.parse_basic()?;
 
-        while self.matches(Token::OpenParen)? {
-            let args_list = self.consume_args()?;
-            func_call = Expr::Call {
-                callee: Box::new(func_call),
-                args: args_list,
+        while let Some(open) = self.matches(Token::OpenParen)? {
+            let (args_list, close) = self.consume_args()?;
+            func_call = Expr {
+                span: open.span + close,
+                kind: ExprKind::Call {
+                    callee: Box::new(func_call),
+                    args: args_list,
+                },
             };
         }
 
@@ -349,23 +365,23 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     fn parse_basic(&mut self) -> Res<Expr> {
-        let token = self.next()?.expect("expected basic token, got none");
-        let expr = match token.t {
-            Token::OpenParen => self.parse_paren()?,
-            Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
-            Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
-            Token::True => Expr::Literal(RuntimeVal::Boolean(true)),
-            Token::False => Expr::Literal(RuntimeVal::Boolean(false)),
+        let lexeme = self.next()?.expect("expected basic token, got none");
+        let expr = match lexeme.t {
+            Token::OpenParen => self.parse_paren(lexeme.span)?,
+            Token::StringLit(string) => Expr { span: lexeme.span, kind: ExprKind::Literal(RuntimeVal::String(string)), } ,
+            Token::NumLit(number) => Expr{ span: lexeme.span, kind: ExprKind::Literal(RuntimeVal::Number(number)) },
+            Token::True => Expr { span: lexeme.span, kind: ExprKind::Literal(RuntimeVal::Boolean(true))},
+            Token::False => Expr { span: lexeme.span, kind: ExprKind::Literal(RuntimeVal::Boolean(false)) },
             Token::Ident(identifier) => self
                 .find_var(&identifier)
-                .map(|(depth, slot)| Expr::VarGet { depth, slot })
-                .unwrap_or(Expr::Ident(identifier)),
+                .map(|(depth, slot)| Expr {span: lexeme.span, kind: ExprKind::VarGet { depth, slot } }) 
+                .unwrap_or(Expr {span: lexeme.span, kind: ExprKind::Ident(identifier)}),
             Token::Let => self.parse_decl()?,
             Token::Fn => self.parse_func_def()?,
             Token::If => self.parse_if()?,
             Token::OpenBracket => Expr::Block(self.parse_block(EnvStackFrame::new())?),
             Token::While => self.parse_while()?,
-            _ => panic!("expected basic token, got non-basic token {}", token.t),
+            _ => panic!("expected basic token, got non-basic token {}", lexeme.t),
         };
 
         Ok(expr)
@@ -373,7 +389,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     // parse_paren assumes that the initial OpenParen token has already
     // been consumed.
-    fn parse_paren(&mut self) -> Res<Expr> {
+    fn parse_paren(&mut self, open: Span) -> Res<Expr> {
         let inner_expr = self.parse_expr()?;
         self.consume(Token::CloseParen, "unclosed paren block")?;
         Ok(inner_expr)
@@ -384,9 +400,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
         self.env.last_mut().expect("no global env").insert(name);
-        let expr = Expr::Decl {
+        
+        let expr = ExprKind::Decl {
             value: Box::new(init),
         };
+        Expr {span: }
         Ok(expr)
     }
 

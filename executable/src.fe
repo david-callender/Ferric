@@ -1,5 +1,15 @@
-let x = fn (a, b) {
-    print(a);
-    print(b);
+let a = fn (b, x) {
+    if x != 0 {
+        print("a: ", x);
+        b(x - 1);
+    };
 };
-x("test");
+
+let b = fn (x) {
+    if x != 0 {
+        print("b: ", x);
+        a(b, x - 1);
+    };
+};
+
+a(b, 10);

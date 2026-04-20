@@ -5,7 +5,7 @@ use std::{fmt::Display, io::Write};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::parser::{BinaryOp, Expr, UnaryOp};
+use crate::parser::{BinaryOp, Expr, ExprKind, UnaryOp};
 use std::thread;
 use std::time::Duration;
 
@@ -295,9 +295,9 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
     // evalute -> condense tree -> runTimeVal
     fn evaluate(&mut self, expr: &Expr) -> Res<RuntimeVal> {
-        Ok(match expr {
-            Expr::Literal(runtime_val) => runtime_val.clone(),
-            Expr::Binary {
+        Ok(match &expr.kind {
+            ExprKind::Literal(runtime_val) => runtime_val.clone(),
+            ExprKind::Binary {
                 left,
                 operation,
                 right,
@@ -318,7 +318,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     BinaryOp::LessEq => operation_leq(left_val, right_val)?,
                 }
             }
-            Expr::Unary { operation, right } => {
+            ExprKind::Unary { operation, right } => {
                 let right_val = self.evaluate(right)?;
                 match operation {
                     UnaryOp::Negate => unary_num_negate(right_val)?,
@@ -326,7 +326,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     UnaryOp::BoolNot => unary_bool_not(right_val)?,
                 }
             }
-            Expr::Call { callee, args } => {
+            ExprKind::Call { callee, args } => {
                 let func_caller = self.evaluate(callee)?;
                 let args = args
                     .iter()
@@ -335,30 +335,30 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 self.call_function(func_caller, args)?
             }
-            Expr::Ident(name) => {
+            ExprKind::Ident(name) => {
                 // check if function exists
                 RuntimeVal::Function(Function::BuiltIn(name.clone()))
             }
-            Expr::Decl { value } => {
+            ExprKind::Decl { value } => {
                 let val = self.evaluate(value)?;
                 self.env.declare(val);
 
                 RuntimeVal::Null
             }
-            Expr::VarGet { depth, slot } => self.env.get(*depth, *slot),
-            Expr::VarSet { value, depth, slot } => {
+            ExprKind::VarGet { depth, slot } => self.env.get(*depth, *slot),
+            ExprKind::VarSet { value, depth, slot } => {
                 let val = self.evaluate(value)?;
                 self.env.set(*depth, *slot, val);
                 RuntimeVal::Null
             }
-            Expr::Func { param_count, body } => {
+            ExprKind::Func { param_count, body } => {
                 RuntimeVal::Function(Function::Custom {
                     param_count: *param_count,
                     body: body.to_owned().into(), // body.to_owned().into(),
                     closure: self.env.clone(),
                 })
             }
-            Expr::If {
+            ExprKind::If {
                 cond,
                 then,
                 otherwise,
@@ -379,10 +379,10 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     }
                 }
             }
-            Expr::Block(expressions) => {
+            ExprKind::Block(expressions) => {
                 self.evaluate_block(expressions, Environment::new(self.env.clone()))?
             }
-            Expr::While { cond, body } => {
+            ExprKind::While { cond, body } => {
                 let RuntimeVal::Boolean(mut while_cond) = self.evaluate(cond)? else {
                     panic!("While condition not boolean expression!");
                 };
@@ -537,7 +537,7 @@ mod tests {
     use core::panic;
     use std::io::{sink, stdout};
 
-    use crate::expr;
+    use crate::{expr, loc::{Loc, Span}, parser::ExprKind};
 
     use super::*;
 
@@ -545,7 +545,7 @@ mod tests {
     fn literal() {
         let mut out = stdout();
 
-        let expr = Expr::Literal(RuntimeVal::Number(5.0));
+        let expr = expr!(NumLit(5.0));
 
         let mut interpreter = Interpreter::new(&mut out);
         let res = interpreter.evaluate(&expr).unwrap();

@@ -64,8 +64,8 @@ pub enum ExprKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
-    kind: ExprKind,
-    span: Span,
+    pub kind: ExprKind,
+    pub span: Span,
 }
 
 impl Expr {
@@ -197,21 +197,25 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(name)
     }
 
-    // consume_parameters assumes that the initial opening paren has
-    // already been parsed.
-    fn consume_parameters(&mut self) -> Res<Vec<String>> {
+    // consume_parameters assumes that the initial opening paren has already
+    // been parsed. Returns the parameter names and the span of the closing
+    // parenthesis.
+    fn consume_parameters(&mut self) -> Res<(Vec<String>, Span)> {
         let mut parameters: Vec<String> = Vec::new();
-        if !self.matches(Token::CloseParen)?.is_some() {
-            parameters.push(self.consume_ident("Function parameters may only be idents")?);
-            while self.matches(Token::Comma)?.is_some() {
+        Ok(match self.matches(Token::CloseParen)? {
+            Some(close) => (vec![], close.span),
+            None => {
                 parameters.push(self.consume_ident("Function parameters may only be idents")?);
-            }
-            self.consume(
-                Token::CloseParen,
-                "Unclosed function definition parentheses or missing comma.",
-            )?;
-        }
-        Ok(parameters)
+                while self.matches(Token::Comma)?.is_some() {
+                    parameters.push(self.consume_ident("Function parameters may only be idents")?);
+                }
+                let close = self.consume(
+                    Token::CloseParen,
+                    "Unclosed function definition parentheses or missing comma.",
+                )?;
+                (parameters, close.span)
+            },
+        })
     }
 
     pub fn parse(&mut self) -> Res<Vec<Expr>> {
@@ -376,11 +380,14 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 .find_var(&identifier)
                 .map(|(depth, slot)| Expr {span: lexeme.span, kind: ExprKind::VarGet { depth, slot } }) 
                 .unwrap_or(Expr {span: lexeme.span, kind: ExprKind::Ident(identifier)}),
-            Token::Let => self.parse_decl()?,
-            Token::Fn => self.parse_func_def()?,
-            Token::If => self.parse_if()?,
-            Token::OpenBracket => Expr::Block(self.parse_block(EnvStackFrame::new())?),
-            Token::While => self.parse_while()?,
+            Token::Let => self.parse_decl(lexeme.span)?,
+            Token::Fn => self.parse_func_def(lexeme.span)?,
+            Token::If => self.parse_if(lexeme.span)?,
+            Token::OpenBracket => {
+                let (body, close) = self.parse_block(EnvStackFrame::new())?;
+                Expr {kind: ExprKind::Block(body) , span: lexeme.span + close }
+            } ,
+            Token::While => self.parse_while(lexeme.span)?,
             _ => panic!("expected basic token, got non-basic token {}", lexeme.t),
         };
 
@@ -391,29 +398,31 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     // been consumed.
     fn parse_paren(&mut self, open: Span) -> Res<Expr> {
         let inner_expr = self.parse_expr()?;
-        self.consume(Token::CloseParen, "unclosed paren block")?;
-        Ok(inner_expr)
+        let close = self.consume(Token::CloseParen, "unclosed paren block")?;
+        Ok(Expr { kind: inner_expr.kind, span: open + close.span })
     }
 
-    fn parse_decl(&mut self) -> Res<Expr> {
+    fn parse_decl(&mut self, let_span: Span) -> Res<Expr> {
         let name = self.consume_ident("Expected variable name after let")?;
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
         self.env.last_mut().expect("no global env").insert(name);
         
-        let expr = ExprKind::Decl {
+        let span = let_span + init.span;
+        
+        let kind = ExprKind::Decl {
             value: Box::new(init),
         };
-        Expr {span: }
+        let expr = Expr {span, kind};
         Ok(expr)
     }
 
-    fn parse_func_def(&mut self) -> Res<Expr> {
-        self.consume(
+    fn parse_func_def(&mut self, fn_span: Span) -> Res<Expr> {
+        let open = self.consume(
             Token::OpenParen,
             "Function definition requires an opening parentheses.",
         )?;
-        let params = self.consume_parameters()?;
+        let (params, close) = self.consume_parameters()?;
         let param_count = params.len();
         let mut frame = EnvStackFrame::new();
         for param in params {
@@ -423,50 +432,56 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::OpenBracket,
             "Function definition requires an opening bracket.",
         )?;
-        Ok(Expr::Func {
-            param_count,
-            body: self.parse_block(frame)?,
-        })
+        let (block, close) = self.parse_block(frame)?;
+        
+        Ok(Expr { span: fn_span + close, kind: ExprKind::Func {
+                    param_count,
+                    body: block,
+                } })
     }
 
-    fn parse_if(&mut self) -> Res<Expr> {
+    fn parse_if(&mut self, if_span: Span) -> Res<Expr> {
         let cond = self.parse_expr()?;
         self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
-        let then = self.parse_block(EnvStackFrame::new())?;
+        let (then, then_end) = self.parse_block(EnvStackFrame::new())?;
 
-        let otherwise = if self.matches(Token::Otherwise)? {
-            let otherwise = if self.matches(Token::OpenBracket)? {
-                Expr::Block(self.parse_block(EnvStackFrame::new())?)
-            } else if self.matches(Token::If)? {
-                self.parse_if()?
+        let (otherwise, span) = if self.matches(Token::Otherwise)?.is_some() {
+            let (otherwise, span) = if let Some(otherwise_open) = self.matches(Token::OpenBracket)? {
+                let (body, close) = self.parse_block(EnvStackFrame::new())?;
+                ((Expr {kind: ExprKind::Block(body), span: otherwise_open.span + close}), if_span + close)
+            } else if let Some(if_lexeme) = self.matches(Token::If)? {
+                let inner = self.parse_if(if_lexeme.span)?;
+                let span = inner.span;
+                ((inner), span)
             } else {
                 panic!("Expected '{{' or 'if' after 'otherwise'");
             };
 
-            Some(Box::new(otherwise))
+            (Some(Box::new(otherwise)), span)
         } else {
-            None
+            (None, if_span + then_end)
         };
 
-        Ok(Expr::If {
+        Ok(Expr{kind: ExprKind::If {
             cond: Box::new(cond),
             then,
             otherwise,
-        })
+        }, span })
     }
 
-    fn parse_while(&mut self) -> Res<Expr> {
+    fn parse_while(&mut self, while_span: Span) -> Res<Expr> {
         let cond = Box::new(self.parse_expr()?);
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
-        let body = self.parse_block(EnvStackFrame::new())?;
-        Ok(Expr::While { cond, body })
+        let (body, close) = self.parse_block(EnvStackFrame::new())?;
+        Ok(Expr {kind: ExprKind::While { cond, body }, span: while_span + close})
     }
 
-    // assumes the leading Token::OpenBracket has already been consumed.
-    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<Vec<Expr>> {
-        if self.matches(Token::CloseBracket)? {
-            return Ok(vec![]);
+    // assumes the leading Token::OpenBracket has already been consumed. Returns
+    // the list of expressions and the span of the closing bracket
+    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<(Vec<Expr>, Span)> {
+        if let Some(close) =  self.matches(Token::CloseBracket)? {
+            return Ok((vec![], close.span));
         }
 
         // each block creates its own scope, so add a blank scope to the
@@ -474,20 +489,20 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.env.push(frame);
 
         let mut exprs = vec![self.parse_expr()?];
-        while self.matches(Token::Semi)? {
-            if self.matches(Token::CloseBracket)? {
-                exprs.push(Expr::Literal(RuntimeVal::Null));
+        while self.matches(Token::Semi)?.is_some() {
+            if let Some(close) = self.matches(Token::CloseBracket)? {
+                exprs.push(Expr {span: close.span, kind: ExprKind::Literal(RuntimeVal::Null)});
                 self.env.pop().expect("misaligned environment stack");
-                return Ok(exprs);
+                return Ok((exprs, close.span));
             }
             exprs.push(self.parse_expr()?);
         }
-        self.consume(
+        let close = self.consume(
             Token::CloseBracket,
             "Expected '}' after block. Check for a missing semicolon on the previous line",
         )?;
         self.env.pop().expect("misaligned environment stack");
-        Ok(exprs)
+        Ok(( exprs, close.span ))
     }
 }
 
@@ -620,7 +635,7 @@ mod tests {
     fn block() {
         // empty
         let mut parser = Parser::new(tokens!(OpenBracket, CloseBracket, Semi));
-        let target = Expr::Block(vec![]);
+        let target = expr!(Block {});
         assert_eq!(parser.parse_expr().unwrap(), target);
 
         // one, return last

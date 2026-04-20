@@ -188,6 +188,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             b'"' => self.lex_string_lit(loc)?,
 
             b => return Err(LexerError::InvalidByte(self.src.clone(), loc, b)),
+
         };
         Ok(tok)
     }
@@ -240,6 +241,24 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             Token::NumLit(self.parse_number(num, span)?),
             span,
         ))
+    }
+
+    fn ignore_comments(&mut self) {
+        if self.stream.peek() == Some(&b'$') {
+            loop {
+                if self.stream.next() == Some(b'\n') {
+                    break;
+                }
+            }
+        }
+        else if self.stream.peek() == Some(&b':') {
+            self.next();
+            loop {
+                if self.stream.next() == Some(b':') && self.stream.next() == Some(b'$') {
+                    break;
+                }
+            }
+        }
     }
 
     fn parse_number(&mut self, digits: Vec<u8>, span: Span) -> Result<f64, LexerError> {
@@ -349,9 +368,14 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
     type Item = Result<Lexeme, LexerError>;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let (c, loc) = self.next()?;
+            let (mut c, mut loc) = self.next()?;
             if c.is_ascii_whitespace() {
                 continue;
+            }
+
+            if c == b'$' {
+                self.ignore_comments();
+                (c, loc) = self.next()?;
             }
 
             let tok = self.lex_byte(c, loc);

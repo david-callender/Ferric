@@ -107,10 +107,6 @@ pub struct Expr {
 }
 
 impl Expr {
-    // fn new(span: Span, kind: ExprKind) -> Self {
-    //     Self { span, kind }
-    // }
-
     fn binary(left: Expr, operation: BinaryOp, right: Expr) -> Self {
         Expr {
             span: left.span + right.span,

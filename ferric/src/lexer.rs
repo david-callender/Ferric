@@ -252,7 +252,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             }
         }
         else if self.stream.peek() == Some(&b':') {
-            self.next();
+            self.stream.next();
             loop {
                 if self.stream.next() == Some(b':') && self.stream.next() == Some(b'$') {
                     break;

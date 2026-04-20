@@ -340,10 +340,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     fn parse_func_call(&mut self) -> Res<Expr> {
         let mut func_call = self.parse_basic()?;
 
-        while let Some(open) = self.matches(Token::OpenParen)? {
+        while self.matches(Token::OpenParen)?.is_some() {
             let (args_list, close) = self.consume_args()?;
             func_call = Expr {
-                span: open.span + close,
+                span: func_call.span + close,
                 kind: ExprKind::Call {
                     callee: Box::new(func_call),
                     args: args_list,

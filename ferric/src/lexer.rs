@@ -363,11 +363,15 @@ impl<I: Iterator<Item = u8>> Iterator for Lexer<I> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
+    use crate::loc::ProgramSrcInner;
+
     use super::*;
     use Token as T;
 
     fn collect_tokens(src: &str) -> Vec<Token> {
-        let src = ProgramSrc::new(src.to_string());
+        let src = Rc::new(ProgramSrcInner::new(src.to_string()));
         Lexer::new(src.clone().stream(), src)
             .map(|lx| lx.unwrap().t)
             .collect()

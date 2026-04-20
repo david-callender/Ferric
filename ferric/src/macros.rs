@@ -27,77 +27,78 @@ macro_rules! tokens {
 #[macro_export]
 macro_rules! expr {
     (Null()) => {
-        Expr::Literal(RuntimeVal::Null)
+        Expr { kind: ExprKind::Literal(RuntimeVal::Null), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (NumLit($n:expr)) => {
-        Expr::Literal(RuntimeVal::Number($n))
+        Expr { kind: ExprKind::Literal(RuntimeVal::Number($n)), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (BoolLit($n:expr)) => {
-        Expr::Literal(RuntimeVal::Boolean($n))
+        Expr { kind: ExprKind::Literal(RuntimeVal::Boolean($n)), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (StrLit($s:expr)) => {
-        Expr::Literal(RuntimeVal::String(String::from($s)))
+        Expr { kind: ExprKind::Literal(RuntimeVal::String(String::from($s))), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Ident($s:expr)) => {
-        Expr::Ident(String::from($s))
+        Expr { kind: ExprKind::Ident(String::from($s)), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Binary($ln:ident$l:tt, $op:ident, $rn:ident$r:tt)) => {
-        Expr::Binary {
+        Expr { kind: ExprKind::Binary {
             left: Box::new(expr!($ln$l)),
             operation: BinaryOp::$op,
             right: Box::new(expr!($rn$r)),
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Unary($op:ident, $rn:ident$r:tt)) => {
-        Expr::Unary {
+        Expr { kind: ExprKind::Unary {
             operation: UnaryOp::$op,
             right: Box::new(expr!($rn$r)),
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Call($cn:ident$c:tt, [$($an:ident$a:tt),* $(,)?])) => {
-        Expr::Call {
+        Expr { kind: ExprKind::Call {
             callee: Box::new(expr!($cn$c)),
             args: vec![$(expr!($an$a)),*],
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
-    (Decl($vn:ident$v:tt, $slot:expr)) => {
-        Expr::Decl {
+    (Decl($vn:ident$v:tt)) => {
+        Expr { kind: ExprKind::Decl {
             value: Box::new(expr!($vn$v)),
-            slot: $slot,
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
-    (VarGet($slot:expr)) => {
-        Expr::VarGet {
+    (VarGet($slot:expr, $depth:expr)) => {
+        Expr { kind: ExprKind::VarGet {
+            depth: $depth,
             slot: $slot,
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
-    (VarSet($vn:ident$v:tt, $slot:expr)) => {
-        Expr::VarSet {
+    (VarSet($vn:ident$v:tt, $depth:expr, $slot:expr)) => {
+        Expr { kind: ExprKind::VarSet {
             value: Box::new(expr!($vn$v)),
+            depth: $depth,
             slot: $slot,
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Block{$($ln:ident$l:tt),* $(,)?}) => {
-        Expr::Block(vec![$(expr!($ln$l)),*])
+        Expr { kind: ExprKind::Block(vec![$(expr!($ln$l)),*]), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
-    (If{$cn:ident$c:tt, $tn:ident$t:tt, None}) => {
-        Expr::If {
+    (If{$cn:ident$c:tt, Block{$($tn:ident$t:tt),* $(,)?}, None}) => {
+        Expr { kind: ExprKind::If {
             cond: Box::new(expr!($cn$c)),
-            then: Box::new(expr!($tn$t)),
+            then: vec![$(expr!($tn$t)),*],
             otherwise: None,
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
-    (If{$cn:ident$c:tt, $tn:ident$t:tt, $on:ident$o:tt}) => {
-        Expr::If {
+    (If{$cn:ident$c:tt, Block{$($tn:ident$t:tt),* $(,)?}, $on:ident$o:tt}) => {
+        Expr { kind: ExprKind::If {
             cond: Box::new(expr!($cn$c)),
-            then: Box::new(expr!($tn$t)),
+            then: vec![$(expr!($tn$t)),*],
             otherwise: Some(Box::new(expr!($on$o))),
-        }
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
-    (While{$cn:ident$c:tt, $bn:ident$b:tt}) => {
-        Expr::While {
+    (While{$cn:ident$c:tt, Block{$($bn:ident$b:tt),* $(,)?}}) => {
+        Expr { kind: ExprKind::While {
             cond: Box::new(expr!($cn$c)),
-            body: Box::new(expr!($bn$b)),
-        }
+            body: vec![$(expr!($bn$b)),*],
+        }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
 }

@@ -5,7 +5,7 @@ use std::{fmt::Display, io::Write};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::parser::{BinaryOp, Expr, UnaryOp};
+use crate::parser::{BinaryOp, Expr, ExprKind, UnaryOp};
 use std::thread;
 use std::time::Duration;
 
@@ -22,11 +22,11 @@ pub enum RuntimeError {
 type Res<T> = Result<T, RuntimeError>;
 
 #[derive(Debug, Clone, PartialEq)]
-enum Function {
+pub enum Function {
     BuiltIn(String),
     Custom {
         param_count: usize,
-        body: Rc<Expr>,
+        body: Rc<[Expr]>,
         closure: Environment,
     },
 }
@@ -46,7 +46,7 @@ impl Display for RuntimeVal {
             Self::Number(n) => write!(f, "{n}"),
             Self::String(s) => write!(f, "{s}"),
             Self::Boolean(b) => write!(f, "{b}"),
-            Self::Function(n) => write!(f, "function"),
+            Self::Function(_) => write!(f, "function"),
             Self::Null => write!(f, "Null"),
         }
     }
@@ -59,7 +59,7 @@ struct EnvLevel {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Environment(Rc<RefCell<EnvLevel>>);
+pub struct Environment(Rc<RefCell<EnvLevel>>);
 
 impl Environment {
     fn new_global() -> Self {
@@ -160,6 +160,7 @@ fn operation_modulo(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Number(n) => Ok(RuntimeVal::Number(-n)),
@@ -167,6 +168,7 @@ fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn unary_bool_not(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Boolean(b) => Ok(RuntimeVal::Boolean(!b)),
@@ -174,6 +176,7 @@ fn unary_bool_not(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
     match right {
         RuntimeVal::Number(n) => {
@@ -184,6 +187,7 @@ fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::float_cmp)]
 fn operation_equal(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 == n2)),
@@ -192,6 +196,7 @@ fn operation_equal(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     }
 }
 
+#[allow(clippy::float_cmp)]
 fn operation_neq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
     match (left, right) {
         (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 != n2)),
@@ -256,7 +261,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 "clock" => builtin_clock(self, args),
                 "unix_time" => builtin_unix_time(self, args),
                 "sleep" => builtin_sleep(self, args),
-                x => panic!("Function {} was not found", x),
+                x => panic!("Function {x} was not found"),
             },
             RuntimeVal::Function(Function::Custom {
                 param_count,
@@ -270,36 +275,29 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     func_env.declare(arg);
                 }
 
-                match body.as_ref() {
-                    Expr::Block(b) => self.evaluate_block(b, func_env)?,
-                    _ => unreachable!("did not find body"),
-                }
+                self.evaluate_block(body.as_ref(), func_env)?
             }
             _ => panic!("Invalid function call"),
         })
     }
 
-    fn evaluate_block(
-        &mut self,
-        expressions: &Vec<Expr>,
-        new_env: Environment,
-    ) -> Result<RuntimeVal, RuntimeError> {
+    fn evaluate_block(&mut self, expressions: &[Expr], new_env: Environment) -> Res<RuntimeVal> {
         let old_env = self.env.clone();
         self.env = new_env;
         // returns Null on empty block
         let mut last_val = RuntimeVal::Null;
         for exp in expressions {
-            last_val = self.evaluate(&exp)?;
+            last_val = self.evaluate(exp)?;
         }
         self.env = old_env;
-        Result::Ok(last_val)
+        Ok(last_val)
     }
 
     // evalute -> condense tree -> runTimeVal
     fn evaluate(&mut self, expr: &Expr) -> Res<RuntimeVal> {
-        Ok(match expr {
-            Expr::Literal(runtime_val) => runtime_val.clone(),
-            Expr::Binary {
+        Ok(match &expr.kind {
+            ExprKind::Literal(runtime_val) => runtime_val.clone(),
+            ExprKind::Binary {
                 left,
                 operation,
                 right,
@@ -320,7 +318,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     BinaryOp::LessEq => operation_leq(left_val, right_val)?,
                 }
             }
-            Expr::Unary { operation, right } => {
+            ExprKind::Unary { operation, right } => {
                 let right_val = self.evaluate(right)?;
                 match operation {
                     UnaryOp::Negate => unary_num_negate(right_val)?,
@@ -328,7 +326,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     UnaryOp::BoolNot => unary_bool_not(right_val)?,
                 }
             }
-            Expr::Call { callee, args } => {
+            ExprKind::Call { callee, args } => {
                 let func_caller = self.evaluate(callee)?;
                 let args = args
                     .iter()
@@ -337,30 +335,30 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 self.call_function(func_caller, args)?
             }
-            Expr::Ident(name) => {
+            ExprKind::Ident(name) => {
                 // check if function exists
                 RuntimeVal::Function(Function::BuiltIn(name.clone()))
             }
-            Expr::Decl { value } => {
+            ExprKind::Decl { value } => {
                 let val = self.evaluate(value)?;
                 self.env.declare(val);
 
                 RuntimeVal::Null
             }
-            Expr::VarGet { depth, slot } => self.env.get(*depth, *slot),
-            Expr::VarSet { depth, slot, value } => {
+            ExprKind::VarGet { depth, slot } => self.env.get(*depth, *slot),
+            ExprKind::VarSet { value, depth, slot } => {
                 let val = self.evaluate(value)?;
                 self.env.set(*depth, *slot, val);
                 RuntimeVal::Null
             }
-            Expr::Func { param_count, body } => {
+            ExprKind::Func { param_count, body } => {
                 RuntimeVal::Function(Function::Custom {
                     param_count: *param_count,
                     body: body.to_owned().into(), // body.to_owned().into(),
                     closure: self.env.clone(),
                 })
             }
-            Expr::If {
+            ExprKind::If {
                 cond,
                 then,
                 otherwise,
@@ -369,7 +367,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 match eval_cond {
                     RuntimeVal::Boolean(b) => {
                         if b {
-                            self.evaluate(then)?
+                            self.evaluate_block(then, Environment::new(self.env.clone()))?
                         } else if let Some(ow_branch) = otherwise {
                             self.evaluate(ow_branch)?
                         } else {
@@ -381,18 +379,16 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     }
                 }
             }
-            Expr::Block(expressions) => {
-                let last_val =
-                    self.evaluate_block(expressions, Environment::new(self.env.clone()))?;
-                last_val
+            ExprKind::Block(expressions) => {
+                self.evaluate_block(expressions, Environment::new(self.env.clone()))?
             }
-            Expr::While { cond, body } => {
+            ExprKind::While { cond, body } => {
                 let RuntimeVal::Boolean(mut while_cond) = self.evaluate(cond)? else {
                     panic!("While condition not boolean expression!");
                 };
 
                 while while_cond {
-                    self.evaluate(body)?;
+                    self.evaluate_block(body, Environment::new(self.env.clone()))?;
 
                     while_cond = match self.evaluate(cond)? {
                         RuntimeVal::Boolean(b) => b,
@@ -432,7 +428,8 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     RuntimeVal::Null
 }
 
-fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_substr<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 3,
         "substr(): Expect 3 args, got {}",
@@ -458,24 +455,23 @@ fn builtin_substr<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -
         );
         assert!(
             start < string.len() as i64,
-            "substr(): String starting index out of bounds: {}",
-            start
+            "substr(): String starting index out of bounds: {start}"
         );
         assert!(
             end <= string.len() as i64,
-            "substr(): String ending index out of bounds: {}",
-            end
+            "substr(): String ending index out of bounds: {end}"
         );
 
         return RuntimeVal::String(string[(start as usize)..(end as usize)].to_string());
     }
     panic!(
         "substr(): Cannot take substring of non-string object: {}",
-        &args[0]
+        args[0]
     );
 }
 
-fn builtin_len<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_len<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 1,
         "len(): Expect 1 argument, got {}",
@@ -487,6 +483,7 @@ fn builtin_len<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> R
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.is_empty(),
@@ -497,7 +494,8 @@ fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
     RuntimeVal::Number((Utc::now() - i.start_time).as_seconds_f64())
 }
 
-fn builtin_unix_time<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_unix_time<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.is_empty(),
         "unix_time: expected 0 args, got {}",
@@ -507,7 +505,8 @@ fn builtin_unix_time<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>
     RuntimeVal::Number((Utc::now() - DateTime::UNIX_EPOCH).as_seconds_f64())
 }
 
-fn builtin_sleep<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[allow(clippy::needless_pass_by_value)]
+fn builtin_sleep<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
     assert!(
         args.len() == 1,
         "sleep(): expected 1 args, got {}",
@@ -538,7 +537,7 @@ mod tests {
     use core::panic;
     use std::io::{sink, stdout};
 
-    use crate::expr;
+    use crate::{expr, loc::{Loc, Span}, parser::ExprKind};
 
     use super::*;
 
@@ -546,9 +545,9 @@ mod tests {
     fn literal() {
         let mut out = stdout();
 
-        let expr = Expr::Literal(RuntimeVal::Number(5.0));
+        let expr = expr!(NumLit(5.0));
 
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
         let res = interpreter.evaluate(&expr).unwrap();
 
         assert_eq!(res, RuntimeVal::Number(5.0));
@@ -563,7 +562,7 @@ mod tests {
             expr!(Call(Ident("print"), [NumLit(5.0)])),
         ];
 
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
         interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"4\n5\n");
@@ -589,7 +588,7 @@ mod tests {
             )]
         ))];
 
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
         interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"bar\n");
@@ -598,7 +597,7 @@ mod tests {
     #[test]
     fn binary_ops_int() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
         let expr = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
         assert_eq!(
@@ -634,7 +633,7 @@ mod tests {
     #[test]
     fn binary_ops_bool() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
         let expr = expr!(Binary(NumLit(4.0), GreaterThan, NumLit(5.0)));
         assert_eq!(
@@ -677,7 +676,7 @@ mod tests {
     fn unary_int() {
         // bit not on numbers
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
         let expr = expr!(Unary(BitNot, NumLit(0.0)));
         assert_eq!(
@@ -698,53 +697,62 @@ mod tests {
         );
     }
 
-    /*
     #[test]
     fn unary_num_() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 0);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        let expr = expr!(Unary(Negate, BoolLit(true)));
-        assert_eq!(interpreter.evaluate(&expr).unwrap(), RuntimeVal::Boolean(false));
+        let expr = expr!(Unary(BoolNot, BoolLit(true)));
+        assert_eq!(
+            interpreter.evaluate(&expr).unwrap(),
+            RuntimeVal::Boolean(false)
+        );
 
-        let expr = expr!(Unary(Negate, BoolLit(false)));
-        assert_eq!(interpreter.evaluate(&expr).unwrap(), RuntimeVal::Boolean(true));
+        let expr = expr!(Unary(BoolNot, BoolLit(false)));
+        assert_eq!(
+            interpreter.evaluate(&expr).unwrap(),
+            RuntimeVal::Boolean(true)
+        );
     }
-    */
 
     #[test]
     fn test_var_set() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 1);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        let expr = vec![expr!(Decl(NumLit(4.0), 0)), expr!(VarSet(NumLit(5.0), 0))];
+        let expr = expr!(Block {
+            Decl(NumLit(4.0)),
+            VarSet(NumLit(5.0), 0, 0),
+            VarGet(0, 0)
+        });
 
-        interpreter.interpret(&expr).unwrap();
-
-        assert_eq!(interpreter.var_storage[0], RuntimeVal::Number(5.0));
+        assert_eq!(
+            interpreter.evaluate(&expr).unwrap(),
+            RuntimeVal::Number(5.0)
+        );
     }
 
     #[test]
     fn clock() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out, 1);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        let test = vec![
-            expr!(Call(Ident("sleep"), [NumLit(1.0)])),
-            expr!(Decl(Call(Ident("clock"), []), 0)),
-        ];
-        let eps = 0.012; // margin of time for program to run after sleep
+        let expr = expr!(Block {
+            Call(Ident("sleep"), [NumLit(1.0)]),
+            Decl(Call(Ident("clock"), [])),
+            VarGet(0, 0),
+        });
 
-        interpreter.interpret(&test).unwrap();
-        if let RuntimeVal::Number(c) = interpreter.var_storage[0] {
-            assert!(
-                eps > (c - 1.0).abs(),
-                "clock ran longer than expected! {}",
-                c - 1.0
-            );
-        } else {
-            panic!("declared variable was not a number!");
-        }
+        let eps = 0.1; // margin of time for program to run after sleep
+
+        let RuntimeVal::Number(c) = interpreter.evaluate(&expr).unwrap() else {
+            panic!("invalid type returned")
+        };
+        assert!(
+            eps > (c - 1.0).abs(),
+            "sleep ran {}s longer than expected",
+            c - 1.0
+        );
     }
 
     #[test]
@@ -752,18 +760,19 @@ mod tests {
         let mut out = sink();
 
         let eps = 1.0;
-        let test = vec![expr!(Decl(Call(Ident("unix_time"), []), 0))];
+        let expr = expr!(Call(Ident("unix_time"), []));
 
-        let mut interpreter = Interpreter::new(&mut out, 1);
+        let mut interpreter = Interpreter::new(&mut out);
 
-        interpreter.interpret(&test).unwrap();
-        let RuntimeVal::Number(c) = interpreter.var_storage[0] else {
-            panic!("invalid var in var_storage")
+        interpreter.evaluate(&expr).unwrap();
+        let RuntimeVal::Number(c) = interpreter.evaluate(&expr).unwrap() else {
+            panic!("invalid type returned")
         };
         let elapsed = Utc::now() - (DateTime::UNIX_EPOCH);
         assert!(
             c - elapsed.as_seconds_f64() < eps,
-            "unix time not reported correctly"
+            "unix time not reported correctly (delta: {})",
+            c - elapsed.as_seconds_f64()
         );
     }
 }

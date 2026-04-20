@@ -1,5 +1,7 @@
-let x = fn (a, b) {
-    print(a);
-    print(b);
+let x = 4;
+
+if x == 4 {
+    print("hi");
 };
-x("test");
+
+y = 5;

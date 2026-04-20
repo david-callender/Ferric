@@ -5,13 +5,13 @@ fn num_digits(n: usize) -> usize {
     n.checked_ilog10().unwrap_or(0) as usize + 1
 }
 
-#[derive(Debug, Clone)]
-pub struct ProgramSrc {
-    src: Rc<str>,
-    line_nums: Rc<[usize]>,
+#[derive(Debug)]
+pub struct ProgramSrcInner {
+    src: String,
+    line_nums: Vec<usize>,
 }
 
-impl ProgramSrc {
+impl ProgramSrcInner {
     #[must_use]
     pub fn new(src: String) -> Self {
         // 1-indexed, so first line is line_nums[1]
@@ -25,10 +25,7 @@ impl ProgramSrc {
 
         line_nums.push(src.len() + 1);
 
-        Self {
-            src: src.into(),
-            line_nums: line_nums.into(),
-        }
+        Self { src, line_nums }
     }
 
     pub fn stream(&self) -> impl Iterator<Item = u8> {
@@ -49,6 +46,8 @@ impl ProgramSrc {
         })
     }
 }
+
+pub type ProgramSrc = Rc<ProgramSrcInner>;
 
 #[derive(Debug, Clone)]
 struct ProgramLine<'a> {

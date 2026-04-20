@@ -1,23 +1,62 @@
-use std::{collections::HashMap, iter::Peekable};
+use std::{collections::HashMap, iter::Peekable, rc::Rc};
 
 use thiserror::Error;
 
 use crate::{
     interpreter::RuntimeVal,
     lexer::{Lexeme, LexerError, Token},
+    loc::{ProgramSrc, ProgramSrcInner, Span},
 };
 
 #[derive(Debug, Clone, Error)]
 pub enum ParserError {
     #[error(transparent)]
     LexerError(#[from] LexerError),
+    #[error("{message}\n{}", .actual.span.format(src, &format!("expected {expected} but found {}", actual.t)))]
+    ExpectedActualMismatch {
+        src: ProgramSrc,
+        expected: Token,
+        actual: Lexeme,
+        message: &'static str,
+    },
+
+    #[error("{message}\nExpected {expected} but found EOF")]
+    ExpectedGotNone {
+        expected: Token,
+        message: &'static str,
+    },
+
+    #[error("{message}\n{}", .actual.span.format(src, &format!("expected identifier but found {}", actual.t)))]
+    ExpectedIdent {
+        src: ProgramSrc,
+        actual: Lexeme,
+        message: &'static str,
+    },
+
+    #[error("{message}\nExpected identifier but found EOF")]
+    ExpectedIdentGotNone { message: &'static str },
+
+    #[error("Expression is not assignable\n{}", .span.format(src, "this expression isn't an identifier or hasn't been declared"))]
+    InvalidVariableName { src: ProgramSrc, span: Span },
+
+    #[error("Unexpected token\n{}", .actual.span.format(src, &format!("this '{}' token was not expected", .actual.t)))]
+    Unexpected { src: ProgramSrc, actual: Lexeme },
+
+    #[error("Unexpected token\nExpected a token but found EOF")]
+    UnexpectedGotNone,
+
+    #[error("Invalid otherwise expression\n{}", .actual.span.format(src, &format!("expected '{{' or 'if' after 'otherwise' but found {}", .actual.t)))]
+    InvalidOtherwise { src: ProgramSrc, actual: Lexeme },
+
+    #[error("Invalid otherwise expression\nExpected '{{' or 'if' after 'otherwise' but found EOF")]
+    InvalidOtherwiseGotNothing,
 }
 
 // Module error type
 type Res<T> = Result<T, ParserError>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub enum ExprKind {
     Literal(RuntimeVal),
     Ident(String),
     Binary {
@@ -41,24 +80,53 @@ pub enum Expr {
         slot: usize,
     },
     VarSet {
+        value: Box<Expr>,
         depth: usize,
         slot: usize,
-        value: Box<Expr>,
     },
     Block(Vec<Expr>),
     If {
         cond: Box<Expr>,
-        then: Box<Expr>,
+        then: Vec<Expr>,
         otherwise: Option<Box<Expr>>,
     },
     While {
         cond: Box<Expr>,
-        body: Box<Expr>,
+        body: Vec<Expr>,
     },
     Func {
         param_count: usize,
-        body: Box<Expr>,
+        body: Vec<Expr>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Expr {
+    pub span: Span,
+    pub kind: ExprKind,
+}
+
+impl Expr {
+    fn binary(left: Expr, operation: BinaryOp, right: Expr) -> Self {
+        Expr {
+            span: left.span + right.span,
+            kind: ExprKind::Binary {
+                left: Box::new(left),
+                operation,
+                right: Box::new(right),
+            },
+        }
+    }
+
+    fn unary(operation: UnaryOp, op_span: Span, right: Expr) -> Self {
+        Expr {
+            span: op_span + right.span,
+            kind: ExprKind::Unary {
+                operation,
+                right: Box::new(right),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +159,7 @@ pub struct EnvStackFrame {
 
 pub struct Parser<I: Iterator<Item = Result<Lexeme, LexerError>>> {
     stream: Peekable<I>,
+    src: ProgramSrc,
     env: Vec<EnvStackFrame>,
 }
 
@@ -108,9 +177,18 @@ impl EnvStackFrame {
 }
 
 impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
-    pub fn new<II: IntoIterator<IntoIter = I>>(stream: II) -> Self {
+    pub fn new<II: IntoIterator<IntoIter = I>>(stream: II, src: ProgramSrc) -> Self {
         Self {
             stream: stream.into_iter().peekable(),
+            src,
+            env: vec![EnvStackFrame::new()], // global
+        }
+    }
+
+    pub fn test<II: IntoIterator<IntoIter = I>>(stream: II) -> Self {
+        Self {
+            stream: stream.into_iter().peekable(),
+            src: Rc::new(ProgramSrcInner::new(String::new())),
             env: vec![EnvStackFrame::new()], // global
         }
     }
@@ -128,15 +206,16 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn matches(&mut self, expected: Token) -> Res<bool> {
-        if self.peek()?.is_some_and(|x| x.t == expected) {
-            let _ = self.next()?.unwrap();
-            Ok(true)
+    #[allow(clippy::needless_pass_by_value)]
+    fn matches(&mut self, expected: Token) -> Res<Option<Lexeme>> {
+        Ok(if self.peek()?.is_some_and(|x| x.t == expected) {
+            Some(self.next()?.unwrap())
         } else {
-            Ok(false)
-        }
+            None
+        })
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     fn is_one_of<const N: usize>(&mut self, expected: [Token; N]) -> Option<Token> {
         if self
             .stream
@@ -145,35 +224,48 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         {
             return Some(self.stream.next().unwrap().unwrap().t);
         }
-        drop(expected);
         None
     }
 
-    fn consume(&mut self, expected: Token, message: &str) -> Res<Token> {
-        let token = self.next()?.expect("expected token, got none").t;
-        assert_eq!(token, expected, "{message}");
-        drop(expected);
-        Ok(token)
+    fn consume(&mut self, expected: Token, message: &'static str) -> Res<Lexeme> {
+        let token = self.next()?.ok_or_else(|| ParserError::ExpectedGotNone {
+            expected: expected.clone(),
+            message,
+        })?;
+        if token.t == expected {
+            Ok(token)
+        } else {
+            Err(ParserError::ExpectedActualMismatch {
+                src: self.src.clone(),
+                expected,
+                actual: token,
+                message,
+            })
+        }
     }
 
-    fn consume_ident(&mut self, message: &str) -> Res<String> {
-        let Some(Lexeme {
-            t: Token::Ident(name),
-            span: _,
-        }) = self.next()?
-        else {
-            panic!("{message}");
-        };
-        Ok(name)
+    fn consume_ident(&mut self, message: &'static str) -> Res<String> {
+        match self.next()? {
+            Some(Lexeme {
+                t: Token::Ident(name),
+                span: _,
+            }) => Ok(name),
+            Some(actual) => Err(ParserError::ExpectedIdent {
+                src: self.src.clone(),
+                actual,
+                message,
+            }),
+            _ => Err(ParserError::ExpectedIdentGotNone { message }),
+        }
     }
 
     // consume_parameters assumes that the initial opening paren has
     // already been parsed.
     fn consume_parameters(&mut self) -> Res<Vec<String>> {
         let mut parameters: Vec<String> = Vec::new();
-        if !self.matches(Token::CloseParen)? {
+        if self.matches(Token::CloseParen)?.is_none() {
             parameters.push(self.consume_ident("Function parameters may only be idents")?);
-            while self.matches(Token::Comma)? {
+            while self.matches(Token::Comma)?.is_some() {
                 parameters.push(self.consume_ident("Function parameters may only be idents")?);
             }
             self.consume(
@@ -200,17 +292,25 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     fn parse_var_set(&mut self) -> Res<Expr> {
         let left = self.parse_comparisons()?;
 
-        if self.matches(Token::Eq)? {
+        if self.matches(Token::Eq)?.is_some() {
             let right = self.parse_comparisons()?;
 
-            let Expr::VarGet { slot, depth } = left else {
-                panic!("Expected variable name to be an identifier");
+            let ExprKind::VarGet { slot, depth } = left.kind else {
+                return Err(ParserError::InvalidVariableName {
+                    src: self.src.clone(),
+                    span: left.span,
+                });
             };
 
-            return Ok(Expr::VarSet {
-                value: Box::new(right),
-                slot,
-                depth,
+            let span = left.span + right.span;
+
+            return Ok(Expr {
+                kind: ExprKind::VarSet {
+                    value: Box::new(right),
+                    depth,
+                    slot,
+                },
+                span,
             });
         }
         Ok(left)
@@ -236,30 +336,18 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             None => return Ok(left),
         };
         let right = self.parse_add_subtract()?;
-        Ok(Expr::Binary {
-            left: Box::new(left),
-            operation,
-            right: Box::new(right),
-        })
+        Ok(Expr::binary(left, operation, right))
     }
 
     fn parse_add_subtract(&mut self) -> Res<Expr> {
         let left = self.parse_mult_div_mod()?;
 
-        if self.matches(Token::Plus)? {
+        if self.matches(Token::Plus)?.is_some() {
             let right = self.parse_mult_div_mod()?;
-            return Ok(Expr::Binary {
-                left: Box::new(left),
-                operation: BinaryOp::Add,
-                right: Box::new(right),
-            });
-        } else if self.matches(Token::Minus)? {
+            return Ok(Expr::binary(left, BinaryOp::Add, right));
+        } else if self.matches(Token::Minus)?.is_some() {
             let right = self.parse_mult_div_mod()?;
-            return Ok(Expr::Binary {
-                left: Box::new(left),
-                operation: BinaryOp::Subtract,
-                right: Box::new(right),
-            });
+            return Ok(Expr::binary(left, BinaryOp::Subtract, right));
         }
         Ok(left)
     }
@@ -274,71 +362,64 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             None => return Ok(left),
         };
         let right = self.parse_unary_op()?;
-        Ok(Expr::Binary {
-            left: Box::new(left),
-            operation,
-            right: Box::new(right),
-        })
+        Ok(Expr::binary(left, operation, right))
     }
 
     fn parse_unary_op(&mut self) -> Res<Expr> {
-        if self.matches(Token::Minus)? {
+        if let Some(lexeme) = self.matches(Token::Minus)? {
             let right = self.parse_func_call()?;
-            return Ok(Expr::Unary {
-                operation: UnaryOp::Negate,
-                right: Box::new(right),
-            });
-        } else if self.matches(Token::Tilde)? {
+            return Ok(Expr::unary(UnaryOp::Negate, lexeme.span, right));
+        } else if let Some(lexeme) = self.matches(Token::Tilde)? {
             let right = self.parse_func_call()?;
-            return Ok(Expr::Unary {
-                operation: UnaryOp::BitNot,
-                right: Box::new(right),
-            });
-        } else if self.matches(Token::Bang)? {
+            return Ok(Expr::unary(UnaryOp::BitNot, lexeme.span, right));
+        } else if let Some(lexeme) = self.matches(Token::Bang)? {
             let right = self.parse_func_call()?;
-            return Ok(Expr::Unary {
-                operation: UnaryOp::BoolNot,
-                right: Box::new(right),
-            });
+            return Ok(Expr::unary(UnaryOp::BoolNot, lexeme.span, right));
         }
         self.parse_func_call()
     }
 
     // consume_args also consumes the closing paren of the
     // arguments list, but assumes that the opening paren has
-    // already been parsed.
-    fn consume_args(&mut self) -> Res<Vec<Expr>> {
-        let mut args_vec = vec![];
-
-        if !self.matches(Token::CloseParen)? {
+    // already been parsed. Also returns the closing param's span
+    fn consume_args(&mut self) -> Res<(Vec<Expr>, Span)> {
+        Ok(if let Some(close) = self.matches(Token::CloseParen)? {
+            (vec![], close.span)
+        } else {
+            let mut args_vec = vec![];
             args_vec.push(self.parse_expr()?);
-            while self.matches(Token::Comma)? {
+            while self.matches(Token::Comma)?.is_some() {
                 args_vec.push(self.parse_expr()?);
             }
-            self.consume(
-                Token::CloseParen,
-                "Unclosed function call parentheses or missing comma",
-            )?;
-        }
-
-        Ok(args_vec)
+            (
+                args_vec,
+                self.consume(
+                    Token::CloseParen,
+                    "Unclosed function call parentheses or missing comma",
+                )?
+                .span,
+            )
+        })
     }
 
     fn parse_func_call(&mut self) -> Res<Expr> {
         let mut func_call = self.parse_basic()?;
 
-        while self.matches(Token::OpenParen)? {
-            let args_list = self.consume_args()?;
-            func_call = Expr::Call {
-                callee: Box::new(func_call),
-                args: args_list,
+        while self.matches(Token::OpenParen)?.is_some() {
+            let (args_list, close) = self.consume_args()?;
+            func_call = Expr {
+                span: func_call.span + close,
+                kind: ExprKind::Call {
+                    callee: Box::new(func_call),
+                    args: args_list,
+                },
             };
         }
 
         Ok(func_call)
     }
 
-    fn find_var(&self, name: &String) -> Option<(usize, usize)> {
+    fn find_var(&self, name: &str) -> Option<(usize, usize)> {
         for (depth, stack_frame) in self.env.iter().rev().enumerate() {
             if let Some(index) = stack_frame.get(name) {
                 return Some((depth, index));
@@ -348,23 +429,52 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     fn parse_basic(&mut self) -> Res<Expr> {
-        let token = self.next()?.expect("expected basic token, got none");
-        let expr = match token.t {
-            Token::OpenParen => self.parse_paren()?,
-            Token::StringLit(string) => Expr::Literal(RuntimeVal::String(string)),
-            Token::NumLit(number) => Expr::Literal(RuntimeVal::Number(number)),
-            Token::True => Expr::Literal(RuntimeVal::Boolean(true)),
-            Token::False => Expr::Literal(RuntimeVal::Boolean(false)),
+        let lexeme = self.next()?.ok_or(ParserError::UnexpectedGotNone)?;
+        let expr = match lexeme.t {
+            Token::OpenParen => self.parse_paren(lexeme.span)?,
+            Token::StringLit(string) => Expr {
+                span: lexeme.span,
+                kind: ExprKind::Literal(RuntimeVal::String(string)),
+            },
+            Token::NumLit(number) => Expr {
+                span: lexeme.span,
+                kind: ExprKind::Literal(RuntimeVal::Number(number)),
+            },
+            Token::True => Expr {
+                span: lexeme.span,
+                kind: ExprKind::Literal(RuntimeVal::Boolean(true)),
+            },
+            Token::False => Expr {
+                span: lexeme.span,
+                kind: ExprKind::Literal(RuntimeVal::Boolean(false)),
+            },
             Token::Ident(identifier) => self
                 .find_var(&identifier)
-                .map(|(depth, slot)| Expr::VarGet { depth, slot })
-                .unwrap_or(Expr::Ident(identifier)),
-            Token::Let => self.parse_decl()?,
-            Token::Fn => self.parse_func_def()?,
-            Token::If => self.parse_if()?,
-            Token::OpenBracket => self.parse_block(EnvStackFrame::new())?,
-            Token::While => self.parse_while()?,
-            _ => panic!("expected basic token, got non-basic token {}", token.t),
+                .map(|(depth, slot)| Expr {
+                    span: lexeme.span,
+                    kind: ExprKind::VarGet { depth, slot },
+                })
+                .unwrap_or(Expr {
+                    span: lexeme.span,
+                    kind: ExprKind::Ident(identifier),
+                }),
+            Token::Let => self.parse_decl(lexeme.span)?,
+            Token::Fn => self.parse_func_def(lexeme.span)?,
+            Token::If => self.parse_if(lexeme.span)?,
+            Token::OpenBracket => {
+                let (body, close) = self.parse_block(EnvStackFrame::new())?;
+                Expr {
+                    kind: ExprKind::Block(body),
+                    span: lexeme.span + close,
+                }
+            }
+            Token::While => self.parse_while(lexeme.span)?,
+            _ => {
+                return Err(ParserError::Unexpected {
+                    src: self.src.clone(),
+                    actual: lexeme,
+                });
+            }
         };
 
         Ok(expr)
@@ -372,24 +482,31 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     // parse_paren assumes that the initial OpenParen token has already
     // been consumed.
-    fn parse_paren(&mut self) -> Res<Expr> {
+    fn parse_paren(&mut self, open: Span) -> Res<Expr> {
         let inner_expr = self.parse_expr()?;
-        self.consume(Token::CloseParen, "unclosed paren block")?;
-        Ok(inner_expr)
+        let close = self.consume(Token::CloseParen, "unclosed paren block")?;
+        Ok(Expr {
+            kind: inner_expr.kind,
+            span: open + close.span,
+        })
     }
 
-    fn parse_decl(&mut self) -> Res<Expr> {
+    fn parse_decl(&mut self, let_span: Span) -> Res<Expr> {
         let name = self.consume_ident("Expected variable name after let")?;
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
         self.env.last_mut().expect("no global env").insert(name);
-        let expr = Expr::Decl {
+
+        let span = let_span + init.span;
+
+        let kind = ExprKind::Decl {
             value: Box::new(init),
         };
+        let expr = Expr { span, kind };
         Ok(expr)
     }
 
-    fn parse_func_def(&mut self) -> Res<Expr> {
+    fn parse_func_def(&mut self, fn_span: Span) -> Res<Expr> {
         self.consume(
             Token::OpenParen,
             "Function definition requires an opening parentheses.",
@@ -404,50 +521,85 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::OpenBracket,
             "Function definition requires an opening bracket.",
         )?;
-        Ok(Expr::Func {
-            param_count,
-            body: Box::new(self.parse_block(frame)?),
+        let (block, close) = self.parse_block(frame)?;
+
+        Ok(Expr {
+            span: fn_span + close,
+            kind: ExprKind::Func {
+                param_count,
+                body: block,
+            },
         })
     }
 
-    fn parse_if(&mut self) -> Res<Expr> {
+    fn parse_if(&mut self, if_span: Span) -> Res<Expr> {
         let cond = self.parse_expr()?;
         self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
-        let then = self.parse_block(EnvStackFrame::new())?;
+        let (then, then_end) = self.parse_block(EnvStackFrame::new())?;
 
-        let otherwise = if self.matches(Token::Otherwise)? {
-            let otherwise = if self.matches(Token::OpenBracket)? {
-                self.parse_block(EnvStackFrame::new())?
-            } else if self.matches(Token::If)? {
-                self.parse_if()?
-            } else {
-                panic!("Expected '{{' or 'if' after 'otherwise'");
+        let (otherwise, span) = if self.matches(Token::Otherwise)?.is_some() {
+            let (otherwise, span) = match self.next()? {
+                Some(Lexeme {
+                    t: Token::OpenBracket,
+                    span: otherwise_open,
+                }) => {
+                    let (body, close) = self.parse_block(EnvStackFrame::new())?;
+                    (
+                        (Expr {
+                            kind: ExprKind::Block(body),
+                            span: otherwise_open + close,
+                        }),
+                        if_span + close,
+                    )
+                }
+                Some(Lexeme {
+                    t: Token::If,
+                    span: if_span,
+                }) => {
+                    let inner = self.parse_if(if_span)?;
+                    let span = inner.span;
+                    ((inner), span)
+                }
+                Some(other) => {
+                    return Err(ParserError::InvalidOtherwise {
+                        src: self.src.clone(),
+                        actual: other,
+                    });
+                }
+                None => return Err(ParserError::InvalidOtherwiseGotNothing),
             };
 
-            Some(Box::new(otherwise))
+            (Some(Box::new(otherwise)), span)
         } else {
-            None
+            (None, if_span + then_end)
         };
 
-        Ok(Expr::If {
-            cond: Box::new(cond),
-            then: Box::new(then),
-            otherwise,
+        Ok(Expr {
+            kind: ExprKind::If {
+                cond: Box::new(cond),
+                then,
+                otherwise,
+            },
+            span,
         })
     }
 
-    fn parse_while(&mut self) -> Res<Expr> {
+    fn parse_while(&mut self, while_span: Span) -> Res<Expr> {
         let cond = Box::new(self.parse_expr()?);
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
-        let body = Box::new(self.parse_block(EnvStackFrame::new())?);
-        Ok(Expr::While { cond, body })
+        let (body, close) = self.parse_block(EnvStackFrame::new())?;
+        Ok(Expr {
+            kind: ExprKind::While { cond, body },
+            span: while_span + close,
+        })
     }
 
-    // assumes the leading Token::OpenBracket has already been consumed.
-    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<Expr> {
-        if self.matches(Token::CloseBracket)? {
-            return Ok(Expr::Block(vec![]));
+    // assumes the leading Token::OpenBracket has already been consumed. Returns
+    // the list of expressions and the span of the closing bracket
+    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<(Vec<Expr>, Span)> {
+        if let Some(close) = self.matches(Token::CloseBracket)? {
+            return Ok((vec![], close.span));
         }
 
         // each block creates its own scope, so add a blank scope to the
@@ -455,20 +607,23 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.env.push(frame);
 
         let mut exprs = vec![self.parse_expr()?];
-        while self.matches(Token::Semi)? {
-            if self.matches(Token::CloseBracket)? {
-                exprs.push(Expr::Literal(RuntimeVal::Null));
+        while self.matches(Token::Semi)?.is_some() {
+            if let Some(close) = self.matches(Token::CloseBracket)? {
+                exprs.push(Expr {
+                    span: close.span,
+                    kind: ExprKind::Literal(RuntimeVal::Null),
+                });
                 self.env.pop().expect("misaligned environment stack");
-                return Ok(Expr::Block(exprs));
+                return Ok((exprs, close.span));
             }
             exprs.push(self.parse_expr()?);
         }
-        self.consume(
+        let close = self.consume(
             Token::CloseBracket,
             "Expected '}' after block. Check for a missing semicolon on the previous line",
         )?;
         self.env.pop().expect("misaligned environment stack");
-        Ok(Expr::Block(exprs))
+        Ok((exprs, close.span))
     }
 }
 
@@ -484,67 +639,67 @@ mod tests {
 
     #[test]
     fn num_literal() {
-        let mut parser = Parser::new(tokens!(NumLit(4.0)));
+        let mut parser = Parser::test(tokens!(NumLit(4.0)));
         assert_eq!(parser.parse_expr().unwrap(), expr!(NumLit(4.0)));
     }
 
     #[test]
     fn string_literal() {
-        let mut parser = Parser::new(tokens!(StrLit("dingus")));
+        let mut parser = Parser::test(tokens!(StrLit("dingus")));
         assert_eq!(parser.parse_expr().unwrap(), expr!(StrLit("dingus")));
     }
 
     #[test]
     fn parentheses() {
-        let mut parser = Parser::new(tokens!(OpenParen, NumLit(4.0), CloseParen));
+        let mut parser = Parser::test(tokens!(OpenParen, NumLit(4.0), CloseParen));
         assert_eq!(parser.parse_expr().unwrap(), expr!(NumLit(4.0)));
     }
 
     #[test]
     fn add() {
-        let mut parser = Parser::new(tokens!(NumLit(4.0), Plus, NumLit(5.0)));
+        let mut parser = Parser::test(tokens!(NumLit(4.0), Plus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn subtract() {
-        let mut parser = Parser::new(tokens!(NumLit(4.0), Minus, NumLit(5.0)));
+        let mut parser = Parser::test(tokens!(NumLit(4.0), Minus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Subtract, NumLit(5.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn multiply() {
-        let mut parser = Parser::new(tokens!(NumLit(20.0), Star, NumLit(22.0)));
+        let mut parser = Parser::test(tokens!(NumLit(20.0), Star, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Multiply, NumLit(22.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn divide() {
-        let mut parser = Parser::new(tokens!(NumLit(20.0), Slash, NumLit(22.0)));
+        let mut parser = Parser::test(tokens!(NumLit(20.0), Slash, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Divide, NumLit(22.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn modulo() {
-        let mut parser = Parser::new(tokens!(NumLit(10.0), Percent, NumLit(2.0)));
+        let mut parser = Parser::test(tokens!(NumLit(10.0), Percent, NumLit(2.0)));
         let target = expr!(Binary(NumLit(10.0), Modulo, NumLit(2.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn simple_funcall() {
-        let mut parser = Parser::new(tokens!(Ident("my_func"), OpenParen, CloseParen));
+        let mut parser = Parser::test(tokens!(Ident("my_func"), OpenParen, CloseParen));
         let target = expr!(Call(Ident("my_func"), []));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn complex_funcall() {
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             Ident("my_func".to_string()),
             OpenParen,
             NumLit(42.0),
@@ -564,28 +719,28 @@ mod tests {
 
     #[test]
     fn unary_minus() {
-        let mut parser = Parser::new(tokens!(Minus, NumLit(6.0)));
+        let mut parser = Parser::test(tokens!(Minus, NumLit(6.0)));
         let target = expr!(Unary(Negate, NumLit(6.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn unary_bitnot() {
-        let mut parser = Parser::new(tokens!(Tilde, NumLit(6.0)));
+        let mut parser = Parser::test(tokens!(Tilde, NumLit(6.0)));
         let target = expr!(Unary(BitNot, NumLit(6.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn unary_and_minus() {
-        let mut parser = Parser::new(tokens!(Minus, NumLit(6.0), Minus, NumLit(6.0)));
+        let mut parser = Parser::test(tokens!(Minus, NumLit(6.0), Minus, NumLit(6.0)));
         let target = expr!(Binary(Unary(Negate, NumLit(6.0)), Subtract, NumLit(6.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn unary_with_parens() {
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             Minus,
             OpenParen,
             NumLit(6.0),
@@ -600,17 +755,17 @@ mod tests {
     #[test]
     fn block() {
         // empty
-        let mut parser = Parser::new(tokens!(OpenBracket, CloseBracket, Semi));
-        let target = Expr::Block(vec![]);
+        let mut parser = Parser::test(tokens!(OpenBracket, CloseBracket, Semi));
+        let target = expr!(Block {});
         assert_eq!(parser.parse_expr().unwrap(), target);
 
         // one, return last
-        let mut parser = Parser::new(tokens!(OpenBracket, NumLit(4.0), CloseBracket, Semi));
+        let mut parser = Parser::test(tokens!(OpenBracket, NumLit(4.0), CloseBracket, Semi));
         let target = expr!(Block { NumLit(4.0) });
         assert_eq!(parser.parse_expr().unwrap(), target);
 
         // one, don't return last
-        let mut parser = Parser::new(tokens!(OpenBracket, NumLit(4.0), Semi, CloseBracket, Semi));
+        let mut parser = Parser::test(tokens!(OpenBracket, NumLit(4.0), Semi, CloseBracket, Semi));
         let target = expr!(Block {
             NumLit(4.0),
             Null()
@@ -618,7 +773,7 @@ mod tests {
         assert_eq!(parser.parse_expr().unwrap(), target);
 
         // many, return last
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             OpenBracket,
             NumLit(4.0),
             Semi,
@@ -633,7 +788,7 @@ mod tests {
         assert_eq!(parser.parse_expr().unwrap(), target);
 
         // many, don't return last
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             OpenBracket,
             NumLit(4.0),
             Semi,
@@ -653,7 +808,7 @@ mod tests {
     #[test]
     fn if_expr() {
         // if
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             If,
             NumLit(1.0),
             OpenBracket,
@@ -671,7 +826,7 @@ mod tests {
         assert_eq!(parser.parse_expr().unwrap(), target);
 
         // if otherwise
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             If,
             NumLit(1.0),
             OpenBracket,
@@ -693,7 +848,7 @@ mod tests {
         assert_eq!(parser.parse_expr().unwrap(), target);
 
         // if otherwise-if otherwise
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             If,
             NumLit(1.0),
             OpenBracket,
@@ -727,22 +882,22 @@ mod tests {
 
     #[test]
     fn comparisons() {
-        let mut parser = Parser::new(tokens!(NumLit(3.0), EqEq, NumLit(4.0)));
+        let mut parser = Parser::test(tokens!(NumLit(3.0), EqEq, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), Equal, NumLit(4.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
 
-        let mut parser = Parser::new(tokens!(NumLit(3.0), Greater, NumLit(4.0)));
+        let mut parser = Parser::test(tokens!(NumLit(3.0), Greater, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), GreaterThan, NumLit(4.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
 
-        let mut parser = Parser::new(tokens!(NumLit(3.0), LessEq, NumLit(4.0)));
+        let mut parser = Parser::test(tokens!(NumLit(3.0), LessEq, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), LessEq, NumLit(4.0)));
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
     #[test]
     fn comparison_order() {
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             NumLit(3.0),
             Plus,
             NumLit(3.0),
@@ -761,7 +916,7 @@ mod tests {
 
     #[test]
     fn while_expr() {
-        let mut parser = Parser::new(tokens!(
+        let mut parser = Parser::test(tokens!(
             While,
             NumLit(1.0),
             Greater,
@@ -782,7 +937,7 @@ mod tests {
 
     //    #[test]
     //    pub fn function_definition() {
-    //	let mut parser = Parser::new(tokens![
+    //	let mut parser = Parser::test(tokens![
     //	    Fn,
     //	    OpenParen,
     //	    Ident("param1".to_string()),

@@ -1,3 +1,7 @@
-{
-print();
+let x = 4;
+
+if x == 4 {
+    print("hi");
 };
+
+y = 5;

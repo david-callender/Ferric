@@ -19,11 +19,13 @@ pub enum FerricError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{interpreter::Interpreter, lexer::Lexer, loc::ProgramSrc, parser::Parser};
+    use std::rc::Rc;
+
+    use crate::{interpreter::Interpreter, lexer::Lexer, loc::ProgramSrcInner, parser::Parser};
 
     fn harness(src: &str) -> String {
-        let src = ProgramSrc::new(src.to_string());
-        let expr = Parser::new(Lexer::new(src.clone().stream(), src))
+        let src = Rc::new(ProgramSrcInner::new(src.to_string()));
+        let expr = Parser::new(Lexer::new(src.clone().stream(), src.clone()), src.clone())
             .parse()
             .unwrap();
 

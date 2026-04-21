@@ -171,8 +171,7 @@ impl Display for Typ {
             Typ::Any => write!(f, "Any"),
             Typ::Null => write!(f, "Null"),
             Typ::Function { vars: _, ret: _ } => write!(f, "Function"),
-            Typ::Unknown => write!(f, "Unknown")
-
+            Typ::Unknown => write!(f, "Unknown"),
         }
     }
 }
@@ -195,7 +194,6 @@ impl EnvStackFrame {
         EnvStackFrame::default()
     }
     pub fn insert(&mut self, name: String, typ: Typ) {
-     
         self.frame.insert(name, self.next_index);
         self.typs.push(typ);
         self.next_index += 1;
@@ -357,7 +355,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             let lhs_type = self.env[depth].typs[slot].clone();
 
             if rhs_type != lhs_type {
-                panic!("Type error: expected {}, got {}", rhs_type, lhs_type )
+                panic!("Type error: expected {}, got {}", rhs_type, lhs_type)
             }
 
             return Ok(Expr {
@@ -560,11 +558,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
             self.env.last_mut().expect("no global env").insert(name, t);
         } else {
-            self.env.last_mut().expect("no global env").insert(name, lhs_type);
+            self.env
+                .last_mut()
+                .expect("no global env")
+                .insert(name, lhs_type);
         }
-        
-        
-        
+
         let span = let_span + init.span;
 
         let kind = ExprKind::Decl {

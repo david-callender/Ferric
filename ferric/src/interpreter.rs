@@ -537,7 +537,11 @@ mod tests {
     use core::panic;
     use std::io::{sink, stdout};
 
-    use crate::{expr, loc::{Loc, Span}, parser::ExprKind};
+    use crate::{
+        expr,
+        loc::{Loc, Span},
+        parser::ExprKind,
+    };
 
     use super::*;
 

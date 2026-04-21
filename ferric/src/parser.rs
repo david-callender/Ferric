@@ -157,10 +157,7 @@ pub enum Typ {
     Number,
     String,
     Null,
-    Function {
-        vars: Vec<Typ>,
-        ret: Box<Typ>,
-    },
+    Function { vars: Vec<Typ>, ret: Box<Typ> },
     Unknown,
 }
 
@@ -289,7 +286,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
         Ok(parameters)
     }
-    
+
     fn type_of(&self, expr: &Expr) -> Typ {
         todo!();
     }
@@ -301,6 +298,22 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             self.consume(Token::Semi, "Expected ';' after expression")?;
         }
         Ok(exprs)
+    }
+
+    fn parse_typ(&mut self) -> Res<Option<Typ>> {
+        if self.matches(Token::Colon)?.is_some() {
+            let typ = match self.next()?.map(|l| l.t) {
+                Some(Token::Null) => Typ::Null,
+                Some(Token::Number) => Typ::Number,
+                Some(Token::String) => Typ::String,
+                Some(Token::Any) => Typ::Any,
+                Some(x) => panic!("Expected type, got {x}"),
+                None => panic!("Expected type"),
+            };
+            Ok(Some(typ))
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse_expr(&mut self) -> Res<Expr> {
@@ -511,6 +524,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     fn parse_decl(&mut self, let_span: Span) -> Res<Expr> {
         let name = self.consume_ident("Expected variable name after let")?;
+        let typ = self.parse_typ();
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
         self.env.last_mut().expect("no global env").insert(name);

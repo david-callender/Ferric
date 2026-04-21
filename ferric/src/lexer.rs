@@ -60,8 +60,13 @@ pub enum Token {
     LAnd,         // and
     LOr,          // or
     Bang,         // !
-    True,         //true
-    False,        //false
+    Colon,        // :
+    True,         // true
+    False,        // false
+    Null,         // null
+    Number,       // number
+    String,       // string
+    Any,          // any
     StringLit(String),
     NumLit(f64),
     Ident(String),
@@ -109,8 +114,13 @@ impl std::fmt::Display for Token {
             Token::LAnd => write!(f, "and"),
             Token::LOr => write!(f, "or"),
             Token::Bang => write!(f, "!"),
+            Token::Colon => write!(f, ":"),
             Token::True => write!(f, "true"),
             Token::False => write!(f, "false"),
+            Token::Null => write!(f, "null"),
+            Token::Number => write!(f, "number"),
+            Token::String => write!(f, "string"),
+            Token::Any => write!(f, "any"),
             Token::StringLit(n) => write!(f, "{n}"),
             Token::NumLit(n) => write!(f, r#""{n}""#),
             Token::Ident(n) => write!(f, "ident[{n}]"),
@@ -140,6 +150,12 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             ("or", Token::LOr),
             ("true", Token::True),
             ("false", Token::False),
+            ("true", Token::True),
+            ("false", Token::False),
+            ("null", Token::Null),
+            ("number", Token::Number),
+            ("string", Token::String),
+            ("any", Token::Any),
         ]);
         Self {
             stream: stream.peekable(),
@@ -180,6 +196,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             b'/' => Lexeme::new(Token::Slash, loc.into()),
             b'%' => Lexeme::new(Token::Percent, loc.into()),
             b'~' => Lexeme::new(Token::Tilde, loc.into()),
+            b':' => Lexeme::new(Token::Colon, loc.into()),
 
             b'=' | b'!' | b'<' | b'>' => self.lex_multi_byte(c, loc),
 

@@ -290,7 +290,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(parameters)
     }
     
-    fn type_of(&self) -> Typ {
+    fn type_of(&self, expr: &Expr) -> Typ {
         todo!();
     }
 

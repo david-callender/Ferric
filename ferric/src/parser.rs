@@ -151,10 +151,23 @@ pub enum UnaryOp {
     BoolNot,
 }
 
+pub enum Typ {
+    Any,
+    Number,
+    String,
+    Null,
+    Function {
+        vars: Vec<Typ>,
+        ret: Box<Typ>,
+    },
+    Unknown,
+}
+
 #[derive(Default)]
 pub struct EnvStackFrame {
     next_index: usize,
     frame: HashMap<String, usize>,
+    typs: Vec<Typ>,
 }
 
 pub struct Parser<I: Iterator<Item = Result<Lexeme, LexerError>>> {
@@ -274,6 +287,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             )?;
         }
         Ok(parameters)
+    }
+    
+    fn type_of(&self) -> Typ {
+        todo!();
     }
 
     pub fn parse(&mut self) -> Res<Vec<Expr>> {

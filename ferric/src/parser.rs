@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, rc::Rc};
+use std::{collections::HashMap, fmt::Display, iter::Peekable, rc::Rc};
 
 use thiserror::Error;
 
@@ -151,7 +151,7 @@ pub enum UnaryOp {
     BoolNot,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Typ {
     Any,
     Number,
@@ -159,6 +159,22 @@ pub enum Typ {
     Null,
     Function { vars: Vec<Typ>, ret: Box<Typ> },
     Unknown,
+}
+
+impl Eq for Typ {}
+
+impl Display for Typ {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Typ::String => write!(f, "String"),
+            Typ::Number => write!(f, "Number"),
+            Typ::Any => write!(f, "Any"),
+            Typ::Null => write!(f, "Null"),
+            Typ::Function { vars: _, ret: _ } => write!(f, "Function"),
+            Typ::Unknown => write!(f, "Unknown")
+
+        }
+    }
 }
 
 #[derive(Default)]
@@ -178,8 +194,10 @@ impl EnvStackFrame {
     pub fn new() -> Self {
         EnvStackFrame::default()
     }
-    pub fn insert(&mut self, name: String) {
+    pub fn insert(&mut self, name: String, typ: Typ) {
+     
         self.frame.insert(name, self.next_index);
+        self.typs.push(typ);
         self.next_index += 1;
     }
     pub fn get(&self, key: &str) -> Option<usize> {
@@ -334,6 +352,13 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             };
 
             let span = left.span + right.span;
+
+            let rhs_type = self.type_of(&right);
+            let lhs_type = self.env[depth].typs[slot].clone();
+
+            if rhs_type != lhs_type {
+                panic!("Type error: expected {}, got {}", rhs_type, lhs_type )
+            }
 
             return Ok(Expr {
                 kind: ExprKind::VarSet {
@@ -524,11 +549,22 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     fn parse_decl(&mut self, let_span: Span) -> Res<Expr> {
         let name = self.consume_ident("Expected variable name after let")?;
-        let typ = self.parse_typ();
+        let typ = self.parse_typ()?; // rhs
         self.consume(Token::Eq, "Expected '=' after let")?;
-        let init = self.parse_expr()?;
-        self.env.last_mut().expect("no global env").insert(name);
+        let init = self.parse_expr()?; // lhs
 
+        let lhs_type = self.type_of(&init); // we haven't insert yet?
+
+        if let Some(t) = typ {
+            assert!(lhs_type == t, "TypeError: Expected {lhs_type}, got {t}");
+
+            self.env.last_mut().expect("no global env").insert(name, t);
+        } else {
+            self.env.last_mut().expect("no global env").insert(name, lhs_type);
+        }
+        
+        
+        
         let span = let_span + init.span;
 
         let kind = ExprKind::Decl {
@@ -547,7 +583,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         let param_count = params.len();
         let mut frame = EnvStackFrame::new();
         for param in params {
-            frame.insert(param);
+            frame.insert(param, Typ::Any);
         }
         self.consume(
             Token::OpenBracket,

@@ -187,6 +187,71 @@ impl EnvStackFrame {
     }
 }
 
+fn type_of_unaryop(kind: &UnaryOp, typ_right: &Typ) -> Typ {
+    match kind {
+        UnaryOp::Negate | UnaryOp::BitNot if *typ_right == Typ::Number => Typ::Number,
+        UnaryOp::Negate => panic!("Unsupported type for numeric negation: {typ_right:?}"),
+        UnaryOp::BitNot => panic!("Unsupported type for bitwise not: {typ_right:?}"),
+        UnaryOp::BoolNot if *typ_right == Typ::Unknown => Typ::Unknown,
+        UnaryOp::BoolNot => panic!("Unsupported type for boolean negation: {typ_right:?}"),
+    }
+}
+
+fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
+    if *typ_left == Typ::Any || *typ_right == Typ::Any {
+        return Typ::Any;
+    }
+    match kind {
+        BinaryOp::Add => match (typ_left, typ_right) {
+            (Typ::Number, Typ::Number) => Typ::Number,
+            (Typ::String, Typ::String) => Typ::String,
+            _ => panic!(
+                "Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"
+            ),
+        },
+        BinaryOp::Subtract => match (typ_left, typ_right) {
+            (Typ::Number, Typ::Number) => Typ::Number,
+            _ => panic!(
+                "Unsupported types for subtraction: left: {typ_left:?}, right: {typ_right:?}"
+            ),
+        },
+        BinaryOp::Multiply => match (typ_left, typ_right) {
+            (Typ::Number, Typ::Number) => Typ::Number,
+            (Typ::String, Typ::Number) => Typ::String,
+            _ => panic!(
+                "Unsupported types for multiplication: left {typ_left:?}, right: {typ_right:?}"
+            ),
+        },
+        BinaryOp::Divide => match (typ_left, typ_right) {
+            (Typ::Number, Typ::Number) => Typ::Number,
+            _ => panic!(
+                "Unsupported types for division: left: {typ_left:?}, right: {typ_right:?}"
+            ),
+        },
+        BinaryOp::Modulo => match (typ_left, typ_right) {
+            (Typ::Number, Typ::Number) => Typ::Number,
+            _ => panic!(
+                "Unsupported types for modulo: left {typ_left:?}, right: {typ_right:?}"
+            ),
+        },
+        BinaryOp::Equal
+        | BinaryOp::NotEqual
+        | BinaryOp::GreaterThan
+        | BinaryOp::LessThan
+        | BinaryOp::GreaterEq
+        | BinaryOp::LessEq => match (typ_left, typ_right) {
+            (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Unknown,
+            _ => panic!(
+                "Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}"
+            ),
+        },
+    }
+}
+
+fn type_of_ident(string: &String) -> Typ {
+    todo!();
+}
+
 impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     pub fn new<II: IntoIterator<IntoIter = I>>(stream: II, src: ProgramSrc) -> Self {
         Self {
@@ -288,7 +353,70 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     fn type_of(&self, expr: &Expr) -> Typ {
-        todo!();
+        match &expr.kind {
+            ExprKind::VarSet {
+                value: _,
+                depth: _,
+                slot: _,
+            }
+            | ExprKind::Decl { value: _ }
+            | ExprKind::While { cond: _, body: _ } => Typ::Null,
+            ExprKind::Literal(kind) => match kind {
+                RuntimeVal::Number(_) => Typ::Number,
+                RuntimeVal::String(_) => Typ::String,
+                RuntimeVal::Boolean(_) => Typ::Unknown,
+                RuntimeVal::Null => Typ::Null,
+                RuntimeVal::Function(_) => unreachable!("Function found in literal expr"),
+            },
+            ExprKind::VarGet { depth, slot } => {
+                    assert!(*depth < self.env.len(), "Variable get references greater depth than stack size");
+                    assert!(*slot < self.env[*depth].typs.len(), "Variable get references greater slot number than exists in referenced stack frame");
+                self.env[*depth].typs[*slot].clone()
+            }
+            ExprKind::Unary {
+                operation: kind,
+                right,
+            } => type_of_unaryop(kind, &self.type_of(right.as_ref())),
+            ExprKind::Binary {
+                left,
+                operation: kind,
+                right,
+            } => type_of_binaryop(
+                &self.type_of(left.as_ref()),
+                kind,
+                &self.type_of(right.as_ref()),
+            ),
+            ExprKind::Call { callee, args: _ } => match self.type_of(callee) {
+                Typ::Function { vars: _, ret } => *ret,
+                _ => panic!("Attempted to call non-function expr"),
+            },
+            ExprKind::Block(exprs) => self.type_of(exprs.last().unwrap()),
+            ExprKind::Func {
+                param_count: _,
+                body,
+            } => self.type_of(body.last().unwrap()),
+            ExprKind::If {
+                cond,
+                then,
+                otherwise,
+            } => {
+                assert_eq!(
+                    Typ::Unknown,
+                    self.type_of(cond.as_ref()),
+                    "If condition is not of boolean type"
+                );
+                let typ_then = self.type_of(then.last().unwrap());
+                if let Some(other) = otherwise {
+                    let typ_otherwise = self.type_of(other.as_ref());
+                    assert_eq!(
+                        typ_then, typ_otherwise,
+                        "All arms of an if-otherwise chain must evaluate to the same type"
+                    );
+                }
+                typ_then
+            }
+            ExprKind::Ident(string) => type_of_ident(string),
+        }
     }
 
     pub fn parse(&mut self) -> Res<Vec<Expr>> {

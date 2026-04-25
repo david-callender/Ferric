@@ -205,9 +205,7 @@ fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
         BinaryOp::Add => match (typ_left, typ_right) {
             (Typ::Number, Typ::Number) => Typ::Number,
             (Typ::String, Typ::String) => Typ::String,
-            _ => panic!(
-                "Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"
-            ),
+            _ => panic!("Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"),
         },
         BinaryOp::Subtract => match (typ_left, typ_right) {
             (Typ::Number, Typ::Number) => Typ::Number,
@@ -224,15 +222,11 @@ fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
         },
         BinaryOp::Divide => match (typ_left, typ_right) {
             (Typ::Number, Typ::Number) => Typ::Number,
-            _ => panic!(
-                "Unsupported types for division: left: {typ_left:?}, right: {typ_right:?}"
-            ),
+            _ => panic!("Unsupported types for division: left: {typ_left:?}, right: {typ_right:?}"),
         },
         BinaryOp::Modulo => match (typ_left, typ_right) {
             (Typ::Number, Typ::Number) => Typ::Number,
-            _ => panic!(
-                "Unsupported types for modulo: left {typ_left:?}, right: {typ_right:?}"
-            ),
+            _ => panic!("Unsupported types for modulo: left {typ_left:?}, right: {typ_right:?}"),
         },
         BinaryOp::Equal
         | BinaryOp::NotEqual
@@ -241,15 +235,40 @@ fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
         | BinaryOp::GreaterEq
         | BinaryOp::LessEq => match (typ_left, typ_right) {
             (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Unknown,
-            _ => panic!(
-                "Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}"
-            ),
+            _ => {
+                panic!("Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}")
+            }
         },
     }
 }
 
+// TODO: This is a terrible implementation of function name resolution. We'd likely do better
+// with a hash table based implementation, but more discussion is needed on the arcitecture
+// of such a solution.
 fn type_of_ident(string: &String) -> Typ {
-    todo!();
+    match string.as_str() {
+        "print" => Typ::Function {
+            vars: Vec::new(),
+            ret: Box::new(Typ::Null),
+        },
+        "substr" => Typ::Function {
+            vars: Vec::new(),
+            ret: Box::new(Typ::String),
+        },
+        "len" => Typ::Function {
+            vars: Vec::new(),
+            ret: Box::new(Typ::Number),
+        },
+        "clock" => Typ::Function {
+            vars: Vec::new(),
+            ret: Box::new(Typ::Number),
+        },
+        "unix_time" => Typ::Function {
+            vars: Vec::new(),
+            ret: Box::new(Typ::Number),
+        },
+        _ => panic!("Got ident which does not resolve to function: {string}"),
+    }
 }
 
 impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
@@ -369,8 +388,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 RuntimeVal::Function(_) => unreachable!("Function found in literal expr"),
             },
             ExprKind::VarGet { depth, slot } => {
-                    assert!(*depth < self.env.len(), "Variable get references greater depth than stack size");
-                    assert!(*slot < self.env[*depth].typs.len(), "Variable get references greater slot number than exists in referenced stack frame");
+                assert!(
+                    *depth < self.env.len(),
+                    "Variable get references greater depth than stack size"
+                );
+                assert!(*slot < self.env[*depth].typs.len(), "Variable get references greater slot number than exists in referenced stack frame");
                 self.env[*depth].typs[*slot].clone()
             }
             ExprKind::Unary {

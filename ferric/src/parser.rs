@@ -416,7 +416,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             ExprKind::Func {
                 param_count: _,
                 body,
-            } => self.type_of(body.last().unwrap()),
+            } => Typ::Function {
+                vars: Vec::new(),
+                ret: Box::new(self.type_of(body.last().unwrap())),
+            },
             ExprKind::If {
                 cond,
                 then,
@@ -678,7 +681,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
         self.env.last_mut().expect("no global env").insert(name);
+        self.env.last_mut().expect("no global env").typs.push(typ.clone().unwrap().unwrap());
 
+        if let Some(typ_inside) = typ.unwrap() {
+            assert_eq!(typ_inside, self.type_of(&init));
+        }
+        
         let span = let_span + init.span;
 
         let kind = ExprKind::Decl {
@@ -1117,25 +1125,25 @@ mod tests {
         assert_eq!(parser.parse_expr().unwrap(), target);
     }
 
-    //    #[test]
-    //    pub fn function_definition() {
-    //	let mut parser = Parser::test(tokens![
-    //	    Fn,
-    //	    OpenParen,
-    //	    Ident("param1".to_string()),
-    //	    Comma,
-    //	    Ident("Param2".to_string()),
-    //	    CloseParen,
-    //	    OpenBracket,
-    //	    NumLit(42.0),
-    //	    CloseBracket,
-    //	]);
-    //	let target = expr!(Func {
-    //	    [Ident("param1"), Ident("param2")],
-    //	    Block {
-    //		NumLit(42.0),
-    //	    }
-    //	});
-    //	assert_eq!(parser.parse(), target);
-    //    }
+    // #[test]
+    // pub fn function_definition() {
+    //     let mut parser = Parser::test(tokens![
+    //         Fn,
+    //         OpenParen,
+    //         Ident("param1".to_string()),
+    //         Comma,
+    //         Ident("Param2".to_string()),
+    //         CloseParen,
+    //         OpenBracket,
+    //         NumLit(42.0),
+    //         CloseBracket,
+    //     ]);
+    //     let target = expr!(Func {
+    //         [Ident("param1"), Ident("param2")],
+    //         Block {
+    //     	NumLit(42.0),
+    //         }
+    //     });
+    //     assert_eq!(parser.parse(), target);
+    // }
 }

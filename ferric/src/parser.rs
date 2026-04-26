@@ -409,16 +409,17 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 &self.type_of(right.as_ref()),
             ),
             ExprKind::Call { callee, args: _ } => match self.type_of(callee) {
+                Typ::Any => Typ::Any,
                 Typ::Function { vars: _, ret } => *ret,
                 _ => panic!("Attempted to call non-function expr"),
             },
-            ExprKind::Block(exprs) => self.type_of(exprs.last().unwrap()),
+            ExprKind::Block(exprs) => self.type_of(exprs.last().expect("Block is entirely empty")),
             ExprKind::Func {
                 param_count: _,
                 body,
             } => Typ::Function {
                 vars: Vec::new(),
-                ret: Box::new(self.type_of(body.last().unwrap())),
+                ret: Box::new(self.type_of(body.last().expect("Function body is entirely empty"))),
             },
             ExprKind::If {
                 cond,
@@ -430,7 +431,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     self.type_of(cond.as_ref()),
                     "If condition is not of boolean type"
                 );
-                let typ_then = self.type_of(then.last().unwrap());
+                let typ_then = self.type_of(then.last().expect("If body is entirely empty"));
                 if let Some(other) = otherwise {
                     let typ_otherwise = self.type_of(other.as_ref());
                     assert_eq!(
@@ -681,11 +682,6 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
         self.env.last_mut().expect("no global env").insert(name);
-        self.env.last_mut().expect("no global env").typs.push(typ.clone().unwrap().unwrap());
-
-        if let Some(typ_inside) = typ.unwrap() {
-            assert_eq!(typ_inside, self.type_of(&init));
-        }
         
         let span = let_span + init.span;
 

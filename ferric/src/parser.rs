@@ -188,6 +188,9 @@ impl EnvStackFrame {
 }
 
 fn type_of_unaryop(kind: &UnaryOp, typ_right: &Typ) -> Typ {
+    if *typ_right == Typ::Any {
+        return Typ::Any;
+    }
     match kind {
         UnaryOp::Negate | UnaryOp::BitNot if *typ_right == Typ::Number => Typ::Number,
         UnaryOp::Negate => panic!("Unsupported type for numeric negation: {typ_right:?}"),

@@ -551,7 +551,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?; // lhs
 
-        let lhs_type = self.type_of(&init); // we haven't insert yet?
+        let lhs_type = self.type_of(&init);
 
         if let Some(t) = typ {
             assert!(lhs_type == t, "TypeError: Expected {lhs_type}, got {t}");

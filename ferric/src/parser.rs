@@ -310,7 +310,9 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     pub fn parse(&mut self) -> Res<Vec<Expr>> {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
-            exprs.push(self.parse_expr()?);
+            let exp = self.parse_expr()?;
+            self.type_of(&exp); // panics if type error
+            exprs.push(exp);
             self.consume(Token::Semi, "Expected ';' after expression")?;
         }
         Ok(exprs)

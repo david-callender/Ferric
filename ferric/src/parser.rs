@@ -374,6 +374,13 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(parameters)
     }
 
+    fn check_block(&self, exprs: &[Expr]) -> Typ {
+	for expr in &exprs[..exprs.len() - 1] {
+	    self.type_of(expr);
+	}
+	self.type_of(exprs.last().expect("check_block received entirely empty block"))
+    }
+    
     fn type_of(&self, expr: &Expr) -> Typ {
         match &expr.kind {
             ExprKind::VarSet {
@@ -381,8 +388,16 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 depth: _,
                 slot: _,
             }
-            | ExprKind::Decl { value: _ }
-            | ExprKind::While { cond: _, body: _ } => Typ::Null,
+            | ExprKind::Decl { value: _ } => Typ::Null,
+	    ExprKind::While { cond, body } => {
+		assert_eq!(
+		    self.type_of(cond),
+		    Typ::Unknown,
+		    "While conditions must be of boolean type",
+		);
+		self.check_block(body);
+		Typ::Null
+	    },
             ExprKind::Literal(kind) => match kind {
                 RuntimeVal::Number(_) => Typ::Number,
                 RuntimeVal::String(_) => Typ::String,
@@ -416,7 +431,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 Typ::Function { vars: _, ret } => *ret,
                 _ => panic!("Attempted to call non-function expr"),
             },
-            ExprKind::Block(exprs) => self.type_of(exprs.last().expect("Block is entirely empty")),
+            ExprKind::Block(exprs) => {
+		for expr in &exprs[..exprs.len() - 1] {
+		    self.type_of(expr);
+		}
+		self.type_of(exprs.last().expect("Block is entirely empty"))
+	    },
             ExprKind::Func {
                 param_count: _,
                 body,
@@ -434,7 +454,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     self.type_of(cond.as_ref()),
                     "If condition is not of boolean type"
                 );
-                let typ_then = self.type_of(then.last().expect("If body is entirely empty"));
+                let typ_then = self.check_block(then);
                 if let Some(other) = otherwise {
                     let typ_otherwise = self.type_of(other.as_ref());
                     assert_eq!(

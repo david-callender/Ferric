@@ -66,6 +66,7 @@ pub enum Token {
     Null,         // null
     Number,       // number
     String,       // string
+    Bool,         // bool
     Any,          // any
     StringLit(String),
     NumLit(f64),
@@ -120,6 +121,7 @@ impl std::fmt::Display for Token {
             Token::Null => write!(f, "null"),
             Token::Number => write!(f, "number"),
             Token::String => write!(f, "string"),
+            Token::Bool => write!(f, "bool"),
             Token::Any => write!(f, "any"),
             Token::StringLit(n) => write!(f, "{n}"),
             Token::NumLit(n) => write!(f, r#""{n}""#),
@@ -155,6 +157,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             ("null", Token::Null),
             ("number", Token::Number),
             ("string", Token::String),
+            ("bool", Token::Bool),
             ("any", Token::Any),
         ]);
         Self {

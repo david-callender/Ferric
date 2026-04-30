@@ -158,7 +158,7 @@ pub enum Typ {
     String,
     Null,
     Function { vars: Vec<Typ>, ret: Box<Typ> },
-    Unknown,
+    Bool,
 }
 
 impl Eq for Typ {}
@@ -171,7 +171,7 @@ impl Display for Typ {
             Typ::Any => write!(f, "Any"),
             Typ::Null => write!(f, "Null"),
             Typ::Function { vars: _, ret: _ } => write!(f, "Function"),
-            Typ::Unknown => write!(f, "Unknown"),
+            Typ::Bool => write!(f, "Unknown"),
         }
     }
 }
@@ -211,7 +211,7 @@ fn type_of_unaryop(kind: &UnaryOp, typ_right: &Typ) -> Typ {
         UnaryOp::Negate | UnaryOp::BitNot if *typ_right == Typ::Number => Typ::Number,
         UnaryOp::Negate => panic!("Unsupported type for numeric negation: {typ_right:?}"),
         UnaryOp::BitNot => panic!("Unsupported type for bitwise not: {typ_right:?}"),
-        UnaryOp::BoolNot if *typ_right == Typ::Unknown => Typ::Unknown,
+        UnaryOp::BoolNot if *typ_right == Typ::Bool => Typ::Bool,
         UnaryOp::BoolNot => panic!("Unsupported type for boolean negation: {typ_right:?}"),
     }
 }
@@ -253,7 +253,7 @@ fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
         | BinaryOp::LessThan
         | BinaryOp::GreaterEq
         | BinaryOp::LessEq => match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Unknown,
+            (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Bool,
             _ => {
                 panic!("Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}")
             }
@@ -412,7 +412,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             ExprKind::While { cond, body } => {
                 assert_eq!(
                     self.type_of(cond),
-                    Typ::Unknown,
+                    Typ::Bool,
                     "While conditions must be of boolean type",
                 );
                 self.check_block(body);
@@ -421,7 +421,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             ExprKind::Literal(kind) => match kind {
                 RuntimeVal::Number(_) => Typ::Number,
                 RuntimeVal::String(_) => Typ::String,
-                RuntimeVal::Boolean(_) => Typ::Unknown,
+                RuntimeVal::Boolean(_) => Typ::Bool,
                 RuntimeVal::Null => Typ::Null,
                 RuntimeVal::Function(_) => unreachable!("Function found in literal expr"),
             },
@@ -470,7 +470,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 otherwise,
             } => {
                 assert_eq!(
-                    Typ::Unknown,
+                    Typ::Bool,
                     self.type_of(cond.as_ref()),
                     "If condition is not of boolean type"
                 );
@@ -505,6 +505,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 Some(Token::Null) => Typ::Null,
                 Some(Token::Number) => Typ::Number,
                 Some(Token::String) => Typ::String,
+                Some(Token::Bool) => Typ::Bool,
                 Some(Token::Any) => Typ::Any,
                 Some(x) => panic!("Expected type, got {x}"),
                 None => panic!("Expected type"),

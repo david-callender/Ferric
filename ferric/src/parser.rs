@@ -375,12 +375,16 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     fn check_block(&self, exprs: &[Expr]) -> Typ {
-	for expr in &exprs[..exprs.len() - 1] {
-	    self.type_of(expr);
-	}
-	self.type_of(exprs.last().expect("check_block received entirely empty block"))
+        for expr in &exprs[..exprs.len() - 1] {
+            self.type_of(expr);
+        }
+        self.type_of(
+            exprs
+                .last()
+                .expect("check_block received entirely empty block"),
+        )
     }
-    
+
     fn type_of(&self, expr: &Expr) -> Typ {
         match &expr.kind {
             ExprKind::VarSet {
@@ -389,15 +393,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 slot: _,
             }
             | ExprKind::Decl { value: _ } => Typ::Null,
-	    ExprKind::While { cond, body } => {
-		assert_eq!(
-		    self.type_of(cond),
-		    Typ::Unknown,
-		    "While conditions must be of boolean type",
-		);
-		self.check_block(body);
-		Typ::Null
-	    },
+            ExprKind::While { cond, body } => {
+                assert_eq!(
+                    self.type_of(cond),
+                    Typ::Unknown,
+                    "While conditions must be of boolean type",
+                );
+                self.check_block(body);
+                Typ::Null
+            }
             ExprKind::Literal(kind) => match kind {
                 RuntimeVal::Number(_) => Typ::Number,
                 RuntimeVal::String(_) => Typ::String,
@@ -432,11 +436,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 _ => panic!("Attempted to call non-function expr"),
             },
             ExprKind::Block(exprs) => {
-		for expr in &exprs[..exprs.len() - 1] {
-		    self.type_of(expr);
-		}
-		self.type_of(exprs.last().expect("Block is entirely empty"))
-	    },
+                for expr in &exprs[..exprs.len() - 1] {
+                    self.type_of(expr);
+                }
+                self.type_of(exprs.last().expect("Block is entirely empty"))
+            }
             ExprKind::Func {
                 param_count: _,
                 body,
@@ -705,7 +709,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.consume(Token::Eq, "Expected '=' after let")?;
         let init = self.parse_expr()?;
         self.env.last_mut().expect("no global env").insert(name);
-        
+
         let span = let_span + init.span;
 
         let kind = ExprKind::Decl {

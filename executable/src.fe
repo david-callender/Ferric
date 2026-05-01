@@ -1,7 +1,6 @@
 let x = 4;
 
 if x == 4 {
-    print("hi");
+    x = 5;
+    print(x);
 };
-
-y = 5;

@@ -157,7 +157,7 @@ pub enum Typ {
     Number,
     String,
     Null,
-    Function { vars: Vec<Typ>, ret: Box<Typ> },
+    Function { params: Vec<Typ>, ret: Box<Typ> },
     Bool,
 }
 
@@ -170,7 +170,7 @@ impl Display for Typ {
             Typ::Number => write!(f, "Number"),
             Typ::Any => write!(f, "Any"),
             Typ::Null => write!(f, "Null"),
-            Typ::Function { vars: _, ret: _ } => write!(f, "Function"),
+            Typ::Function { params: _, ret: _ } => write!(f, "Function"),
             Typ::Bool => write!(f, "Unknown"),
         }
     }
@@ -204,15 +204,13 @@ impl EnvStackFrame {
 }
 
 fn type_of_unaryop(kind: &UnaryOp, typ_right: &Typ) -> Typ {
-    if *typ_right == Typ::Any {
-        return Typ::Any;
-    }
-    match kind {
-        UnaryOp::Negate | UnaryOp::BitNot if *typ_right == Typ::Number => Typ::Number,
-        UnaryOp::Negate => panic!("Unsupported type for numeric negation: {typ_right:?}"),
-        UnaryOp::BitNot => panic!("Unsupported type for bitwise not: {typ_right:?}"),
-        UnaryOp::BoolNot if *typ_right == Typ::Bool => Typ::Bool,
-        UnaryOp::BoolNot => panic!("Unsupported type for boolean negation: {typ_right:?}"),
+    match (kind, typ_right) {
+        (_, Typ::Any) => Typ::Any,
+        (UnaryOp::Negate | UnaryOp::BitNot, Typ::Number) => Typ::Number,
+        (UnaryOp::BoolNot, Typ::Bool) => Typ::Bool,
+        (UnaryOp::Negate, _) => panic!("Unsupported type for numeric negation: {typ_right:?}"),
+        (UnaryOp::BitNot, _) => panic!("Unsupported type for bitwise not: {typ_right:?}"),
+        (UnaryOp::BoolNot, _) => panic!("Unsupported type for boolean negation: {typ_right:?}"),
     }
 }
 
@@ -261,29 +259,22 @@ fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
     }
 }
 
-// TODO: This is a terrible implementation of function name resolution. We'd likely do better
-// with a hash table based implementation, but more discussion is needed on the arcitecture
-// of such a solution.
 fn type_of_ident(string: &String) -> Typ {
     match string.as_str() {
         "print" => Typ::Function {
-            vars: Vec::new(),
+            params: vec![Typ::Any],
             ret: Box::new(Typ::Null),
         },
         "substr" => Typ::Function {
-            vars: Vec::new(),
+            params: vec![Typ::String, Typ::Number, Typ::Number],
             ret: Box::new(Typ::String),
         },
         "len" => Typ::Function {
-            vars: Vec::new(),
+            params: vec![Typ::String],
             ret: Box::new(Typ::Number),
         },
-        "clock" => Typ::Function {
-            vars: Vec::new(),
-            ret: Box::new(Typ::Number),
-        },
-        "unix_time" => Typ::Function {
-            vars: Vec::new(),
+        "clock" | "unix_time" => Typ::Function {
+            params: vec![],
             ret: Box::new(Typ::Number),
         },
         _ => panic!("Got ident which does not resolve to function: {string}"),
@@ -390,32 +381,24 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(parameters)
     }
 
-    fn check_block(&self, exprs: &[Expr]) -> Typ {
-        for expr in &exprs[..exprs.len() - 1] {
-            self.type_of(expr);
+    fn type_of_block(&self, exprs: &[Expr]) -> Typ {
+        let mut typ = Typ::Null;
+        for expr in exprs {
+            typ = self.type_of(expr);
         }
-        self.type_of(
-            exprs
-                .last()
-                .expect("check_block received entirely empty block"),
-        )
+        typ
     }
 
     fn type_of(&self, expr: &Expr) -> Typ {
         match &expr.kind {
-            ExprKind::VarSet {
-                value: _,
-                depth: _,
-                slot: _,
-            }
-            | ExprKind::Decl { value: _ } => Typ::Null,
+            ExprKind::VarSet { .. } | ExprKind::Decl { .. } => Typ::Null,
             ExprKind::While { cond, body } => {
                 assert_eq!(
                     self.type_of(cond),
                     Typ::Bool,
                     "While conditions must be of boolean type",
                 );
-                self.check_block(body);
+                self.type_of_block(body);
                 Typ::Null
             }
             ExprKind::Literal(kind) => match kind {
@@ -430,7 +413,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     *depth < self.env.len(),
                     "Variable get references greater depth than stack size"
                 );
-                assert!(*slot < self.env[*depth].typs.len(), "Variable get references greater slot number than exists in referenced stack frame");
+                assert!(
+                    *slot < self.env[*depth].typs.len(),
+                    "Variable get references greater slot number than exists in referenced stack frame"
+                );
                 self.env[*depth].typs[*slot].clone()
             }
             ExprKind::Unary {
@@ -448,7 +434,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             ),
             ExprKind::Call { callee, args: _ } => match self.type_of(callee) {
                 Typ::Any => Typ::Any,
-                Typ::Function { vars: _, ret } => *ret,
+                Typ::Function { params: _, ret } => *ret,
                 _ => panic!("Attempted to call non-function expr"),
             },
             ExprKind::Block(exprs) => {
@@ -461,7 +447,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 param_count: _,
                 body,
             } => Typ::Function {
-                vars: Vec::new(),
+                params: Vec::new(),
                 ret: Box::new(self.type_of(body.last().expect("Function body is entirely empty"))),
             },
             ExprKind::If {
@@ -474,7 +460,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     self.type_of(cond.as_ref()),
                     "If condition is not of boolean type"
                 );
-                let typ_then = self.check_block(then);
+                let typ_then = self.type_of_block(then);
                 if let Some(other) = otherwise {
                     let typ_otherwise = self.type_of(other.as_ref());
                     assert_eq!(
@@ -538,9 +524,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             let rhs_type = self.type_of(&right);
             let lhs_type = self.env[depth].typs[slot].clone();
 
-            if rhs_type != lhs_type {
-                panic!("Type error: expected {}, got {}", rhs_type, lhs_type)
-            }
+            assert!(
+                rhs_type == lhs_type,
+                "Type error: expected {rhs_type}, got {lhs_type}"
+            );
 
             return Ok(Expr {
                 kind: ExprKind::VarSet {

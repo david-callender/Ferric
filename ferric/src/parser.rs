@@ -6,6 +6,7 @@ use crate::{
     interpreter::RuntimeVal,
     lexer::{Lexeme, LexerError, Token},
     loc::{ProgramSrc, ProgramSrcInner, Span},
+    matches_many,
 };
 
 #[derive(Debug, Clone, Error)]
@@ -498,7 +499,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     pub fn parse(&mut self) -> Res<Vec<Expr>> {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
-            let exp = self.parse_expr()?;
+            let exp = self.parse_expr()?.0;
             self.type_of(&exp); // panics if type error
             exprs.push(exp);
             self.consume(Token::Semi, "Expected ';' after expression")?;
@@ -523,15 +524,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn parse_expr(&mut self) -> Res<Expr> {
+    fn parse_expr(&mut self) -> Res<(Expr, Typ)> {
         self.parse_var_set()
     }
 
-    fn parse_var_set(&mut self) -> Res<Expr> {
-        let left = self.parse_comparisons()?;
+    fn parse_var_set(&mut self) -> Res<(Expr, Typ)> {
+        let (left, typ_left) = self.parse_comparisons()?;
 
         if self.matches(Token::Eq)?.is_some() {
-            let right = self.parse_comparisons()?;
+            let (right, typ_right) = self.parse_comparisons()?;
 
             let ExprKind::VarGet { slot, depth } = left.kind else {
                 return Err(ParserError::InvalidVariableName {
@@ -542,7 +543,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
             let span = left.span + right.span;
 
-            let rhs_type = self.type_of(&right);
+            let rhs_type = typ_right;
             let lhs_type = self.env[depth].typs[slot].clone();
 
             assert!(
@@ -550,20 +551,24 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 "Type error: expected {rhs_type}, got {lhs_type}"
             );
 
-            return Ok(Expr {
-                kind: ExprKind::VarSet {
-                    value: Box::new(right),
-                    depth,
-                    slot,
+            return Ok((
+                Expr {
+                    kind: ExprKind::VarSet {
+                        value: Box::new(right),
+                        depth,
+                        slot,
+                    },
+                    span,
                 },
-                span,
-            });
+                Typ::Null,
+            ));
         }
-        Ok(left)
+        Ok((left, typ_left))
     }
 
-    fn parse_comparisons(&mut self) -> Res<Expr> {
-        let left = self.parse_add_subtract()?;
+    fn parse_comparisons(&mut self) -> Res<(Expr, Typ)> {
+        let (left, typ_left) = self.parse_add_subtract()?;
+
         let operation = match self.is_one_of([
             Token::Greater,
             Token::GreaterEq,
@@ -579,26 +584,45 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Some(Token::Greater) => BinaryOp::GreaterThan,
             Some(Token::GreaterEq) => BinaryOp::GreaterEq,
             Some(_) => unreachable!(),
-            None => return Ok(left),
+            None => return Ok((left, typ_left)),
         };
-        let right = self.parse_add_subtract()?;
-        Ok(Expr::binary(left, operation, right))
+        let (right, typ_right) = self.parse_add_subtract()?;
+        let typ = match (typ_left, typ_right) {
+            (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Bool,
+            (typ_left, typ_right) => {
+                panic!("Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}")
+            }
+        };
+        Ok((Expr::binary(left, operation, right), typ))
     }
 
-    fn parse_add_subtract(&mut self) -> Res<Expr> {
-        let left = self.parse_mult_div_mod()?;
+    fn parse_add_subtract(&mut self) -> Res<(Expr, Typ)> {
+        let (left, typ_left) = self.parse_mult_div_mod()?;
 
         if self.matches(Token::Plus)?.is_some() {
-            let right = self.parse_mult_div_mod()?;
-            return Ok(Expr::binary(left, BinaryOp::Add, right));
+            let (right, typ_right) = self.parse_mult_div_mod()?;
+            let typ = match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) => Typ::Number,
+                (Typ::String, Typ::String) => Typ::String,
+                (typ_left, typ_right) => panic!(
+                    "Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"
+                ),
+            };
+            return Ok((Expr::binary(left, BinaryOp::Add, right), typ));
         } else if self.matches(Token::Minus)?.is_some() {
-            let right = self.parse_mult_div_mod()?;
-            return Ok(Expr::binary(left, BinaryOp::Subtract, right));
+            let (right, typ_right) = self.parse_mult_div_mod()?;
+            let typ = match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) => Typ::Number,
+                (typ_left, typ_right) => panic!(
+                    "Unsupported types for subtraction: left: {typ_left:?}, right: {typ_right:?}"
+                ),
+            };
+            return Ok((Expr::binary(left, BinaryOp::Subtract, right), typ));
         }
-        Ok(left)
+        Ok((left, typ_left))
     }
 
-    fn parse_mult_div_mod(&mut self) -> Res<Expr> {
+    fn parse_mult_div_mod(&mut self) -> Res<(Expr, Typ)> {
         let left = self.parse_unary_op()?;
         let operation = match self.is_one_of([Token::Star, Token::Slash, Token::Percent]) {
             Some(Token::Star) => BinaryOp::Multiply,
@@ -611,7 +635,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(Expr::binary(left, operation, right))
     }
 
-    fn parse_unary_op(&mut self) -> Res<Expr> {
+    fn parse_unary_op(&mut self) -> Res<(Expr, Typ)> {
         if let Some(lexeme) = self.matches(Token::Minus)? {
             let right = self.parse_func_call()?;
             return Ok(Expr::unary(UnaryOp::Negate, lexeme.span, right));
@@ -628,7 +652,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     // consume_args also consumes the closing paren of the
     // arguments list, but assumes that the opening paren has
     // already been parsed. Also returns the closing param's span
-    fn consume_args(&mut self) -> Res<(Vec<Expr>, Span)> {
+    fn consume_args(&mut self) -> Res<(Vec<(Expr, Typ)>, Span)> {
         Ok(if let Some(close) = self.matches(Token::CloseParen)? {
             (vec![], close.span)
         } else {
@@ -648,7 +672,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn parse_func_call(&mut self) -> Res<Expr> {
+    fn parse_func_call(&mut self) -> Res<(Expr, Typ)> {
         let mut func_call = self.parse_basic()?;
 
         while self.matches(Token::OpenParen)?.is_some() {
@@ -674,7 +698,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         None
     }
 
-    fn parse_basic(&mut self) -> Res<Expr> {
+    fn parse_basic(&mut self) -> Res<(Expr, Typ)> {
         let lexeme = self.next()?.ok_or(ParserError::UnexpectedGotNone)?;
         let expr = match lexeme.t {
             Token::OpenParen => self.parse_paren(lexeme.span)?,
@@ -728,7 +752,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     // parse_paren assumes that the initial OpenParen token has already
     // been consumed.
-    fn parse_paren(&mut self, open: Span) -> Res<Expr> {
+    fn parse_paren(&mut self, open: Span) -> Res<(Expr, Typ)> {
         let inner_expr = self.parse_expr()?;
         let close = self.consume(Token::CloseParen, "unclosed paren block")?;
         Ok(Expr {
@@ -737,7 +761,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn parse_decl(&mut self, let_span: Span) -> Res<Expr> {
+    fn parse_decl(&mut self, let_span: Span) -> Res<(Expr, Typ)> {
         let name = self.consume_ident("Expected variable name after let")?;
         let typ = self.parse_typ()?; // rhs
         self.consume(Token::Eq, "Expected '=' after let")?;
@@ -765,7 +789,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(expr)
     }
 
-    fn parse_func_def(&mut self, fn_span: Span) -> Res<Expr> {
+    fn parse_func_def(&mut self, fn_span: Span) -> Res<(Expr, Typ)> {
         self.consume(
             Token::OpenParen,
             "Function definition requires an opening parentheses.",
@@ -791,7 +815,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn parse_if(&mut self, if_span: Span) -> Res<Expr> {
+    fn parse_if(&mut self, if_span: Span) -> Res<(Expr, Typ)> {
         let cond = self.parse_expr()?;
         self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
@@ -844,7 +868,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn parse_while(&mut self, while_span: Span) -> Res<Expr> {
+    fn parse_while(&mut self, while_span: Span) -> Res<(Expr, Typ)> {
         let cond = Box::new(self.parse_expr()?);
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
         let (body, close) = self.parse_block(EnvStackFrame::new())?;

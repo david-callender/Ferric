@@ -1,4 +1,16 @@
 #[macro_export]
+macro_rules! matches_many {
+    ($self:expr, $($kind:ident($name:tt) => $body:expr),* ,  _ => $last:expr) => {
+        match () {
+            $(
+                () if let Some($name) = $self.matches(Token::$kind)? => {$body},
+            )*
+            () => {$last},
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! one_token {
     (StrLit($s:expr)) => {
         Ok(Lexeme::new(Token::StringLit(Rc::<str>::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1))))

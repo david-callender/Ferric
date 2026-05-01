@@ -58,7 +58,7 @@ type Res<T> = Result<T, ParserError>;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     Literal(RuntimeVal),
-    Ident(String),
+    Ident(Rc<str>),
     Binary {
         left: Box<Expr>,
         op: BinaryOp,
@@ -207,7 +207,7 @@ impl Display for Typ {
 #[derive(Default)]
 pub struct EnvStackFrame {
     next_index: usize,
-    frame: HashMap<String, usize>,
+    frame: HashMap<Rc<str>, usize>,
     typs: Vec<Typ>,
 }
 
@@ -221,7 +221,7 @@ impl EnvStackFrame {
     pub fn new() -> Self {
         EnvStackFrame::default()
     }
-    pub fn insert(&mut self, name: String, typ: Typ) {
+    pub fn insert(&mut self, name: Rc<str>, typ: Typ) {
         self.frame.insert(name, self.next_index);
         self.typs.push(typ);
         self.next_index += 1;
@@ -287,8 +287,8 @@ fn type_of_binaryop(typ_left: &Typ, kind: BinaryOp, typ_right: &Typ) -> Typ {
     }
 }
 
-fn type_of_ident(string: &String) -> Typ {
-    match string.as_str() {
+fn type_of_ident(string: &str) -> Typ {
+    match string {
         "print" => Typ::Function {
             params: vec![Typ::Any],
             ret: Box::new(Typ::Null),
@@ -377,7 +377,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn consume_ident(&mut self, message: &'static str) -> Res<String> {
+    fn consume_ident(&mut self, message: &'static str) -> Res<Rc<str>> {
         match self.next()? {
             Some(Lexeme {
                 t: Token::Ident(name),
@@ -394,8 +394,8 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     // consume_parameters assumes that the initial opening paren has
     // already been parsed.
-    fn consume_parameters(&mut self) -> Res<Vec<String>> {
-        let mut parameters: Vec<String> = Vec::new();
+    fn consume_parameters(&mut self) -> Res<Vec<Rc<str>>> {
+        let mut parameters: Vec<Rc<str>> = Vec::new();
         if self.matches(Token::CloseParen)?.is_none() {
             parameters.push(self.consume_ident("Function parameters may only be idents")?);
             while self.matches(Token::Comma)?.is_some() {
@@ -491,7 +491,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 }
                 typ_then
             }
-            ExprKind::Ident(string) => type_of_ident(string),
+            ExprKind::Ident(string) => type_of_ident(string.as_ref()),
         }
     }
 
@@ -959,14 +959,14 @@ mod tests {
     #[test]
     fn complex_funcall() {
         let mut parser = Parser::test(tokens!(
-            Ident("my_func".to_string()),
+            Ident("my_func"),
             OpenParen,
             NumLit(42.0),
             Comma,
             NumLit(88.0),
             CloseParen,
             OpenParen,
-            StringLit("dingus".to_string()),
+            StrLit("dingus"),
             CloseParen
         ));
         let target = expr!(Call(

@@ -1,10 +1,10 @@
 #[macro_export]
 macro_rules! one_token {
     (StrLit($s:expr)) => {
-        Ok(Lexeme::new(Token::StringLit(String::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1))))
+        Ok(Lexeme::new(Token::StringLit(Rc::<str>::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1))))
     };
     (Ident($s:expr)) => {
-        Ok(Lexeme::new(Token::Ident(String::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1))))
+        Ok(Lexeme::new(Token::Ident(Rc::<str>::from($s)), Span::new(Loc::new(1, 1), Loc::new(1, 1))))
     };
     ($name:ident$(($($t:tt)*))?) => {
         Ok(Lexeme::new(Token::$name$(($($t)*))?, Span::new(Loc::new(1, 1), Loc::new(1, 1))))
@@ -36,10 +36,10 @@ macro_rules! expr {
         Expr { kind: ExprKind::Literal(RuntimeVal::Boolean($n)), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (StrLit($s:expr)) => {
-        Expr { kind: ExprKind::Literal(RuntimeVal::String(String::from($s))), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
+        Expr { kind: ExprKind::Literal(RuntimeVal::String(Rc::<str>::from($s))), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Ident($s:expr)) => {
-        Expr { kind: ExprKind::Ident(String::from($s)), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
+        Expr { kind: ExprKind::Ident(Rc::<str>::from($s)), span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Binary($ln:ident$l:tt, $op:ident, $rn:ident$r:tt)) => {
         Expr { kind: ExprKind::Binary {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, string::FromUtf8Error, vec};
+use std::{collections::HashMap, iter::Peekable, rc::Rc, string::FromUtf8Error, vec};
 
 use thiserror::Error;
 
@@ -68,9 +68,9 @@ pub enum Token {
     String,       // string
     Bool,         // bool
     Any,          // any
-    StringLit(String),
+    StringLit(Rc<str>),
     NumLit(f64),
-    Ident(String),
+    Ident(Rc<str>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -315,7 +315,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         let tok = if let Some(keyword) = self.keywords.get(ident.as_str()) {
             keyword.clone()
         } else {
-            Token::Ident(ident)
+            Token::Ident(ident.into())
         };
 
         Ok(Lexeme::new(tok, span))
@@ -334,7 +334,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
                 let span = Span::new(start, end);
                 let st = String::from_utf8(st)
                     .map_err(|err| LexerError::StrLitInvalidUtf8(self.src.clone(), span, err))?;
-                return Ok(Lexeme::new(Token::StringLit(st), span));
+                return Ok(Lexeme::new(Token::StringLit(st.into()), span));
             }
             if s == b'\\' {
                 // should be made into its own error
@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn ident() {
-        assert_eq!(collect_tokens("hello"), vec![T::Ident("hello".to_string())]);
+        assert_eq!(collect_tokens("hello"), vec![T::Ident("hello".into())]);
         assert_eq!(collect_tokens("and"), vec![T::LAnd]);
     }
 
@@ -461,11 +461,11 @@ mod tests {
     fn string_lit() {
         assert_eq!(
             collect_tokens("\"string lit\""),
-            vec![T::StringLit("string lit".to_string())]
+            vec![T::StringLit("string lit".into())]
         );
         assert_eq!(
             collect_tokens("\"string\\n\\tlit\""),
-            vec![T::StringLit("string\n\tlit".to_string())]
+            vec![T::StringLit("string\n\tlit".into())]
         );
     }
 }

@@ -57,7 +57,7 @@ pub enum RuntimeError {
     InvalidArg {
         src: ProgramSrc,
         span: Span,
-        name: String,
+        name: Rc<str>,
         arg_index: usize,
         expected: &'static str,
         actual: RuntimeVal,
@@ -67,7 +67,7 @@ pub enum RuntimeError {
     TooManyArgs {
         src: ProgramSrc,
         span: Span,
-        name: String,
+        name: Rc<str>,
         expected: usize,
         actual: usize,
     },
@@ -76,7 +76,7 @@ pub enum RuntimeError {
     NotEnoughArgs {
         src: ProgramSrc,
         span: Span,
-        name: String,
+        name: Rc<str>,
     },
 }
 
@@ -85,7 +85,7 @@ type Res<T> = Result<T, RuntimeError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Function {
-    BuiltIn(String),
+    BuiltIn(Rc<str>),
     Custom {
         param_count: usize,
         body: Rc<[Expr]>,
@@ -96,7 +96,7 @@ pub enum Function {
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeVal {
     Number(f64),
-    String(String),
+    String(Rc<str>),
     Boolean(bool),
     Function(Function),
     Null,
@@ -215,9 +215,9 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn operation_add(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
         match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 + n2)),
-            (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
-                s1.push_str(&s2);
-                Ok(RuntimeVal::String(s1))
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => {
+                let s = format!("{s1}{s2}");
+                Ok(RuntimeVal::String(s.into()))
             }
             (left, right) => Err(RuntimeError::BinaryTypeMismatch {
                 src: self.src.clone(),
@@ -241,7 +241,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     });
                 }
 
-                s1 = s1.repeat(n as usize);
+                s1 = s1.repeat(n as usize).into();
 
                 Ok(RuntimeVal::String(s1))
             }
@@ -461,7 +461,7 @@ impl<'a, W: Write> Interpreter<'a, W> {
         Ok(match f {
             RuntimeVal::Function(Function::BuiltIn(fn_name)) => {
                 let args = Args::new(args, self.src.clone(), s, fn_name.clone());
-                match fn_name.as_str() {
+                match fn_name.as_ref() {
                     "print" => builtin_print(self, args)?,
                     "substr" => builtin_substr(args)?,
                     "len" => builtin_len(args)?,
@@ -613,7 +613,7 @@ struct Args {
     src: ProgramSrc,
     span: Span,
     count: usize,
-    name: String,
+    name: Rc<str>,
 }
 
 impl Args {
@@ -621,7 +621,7 @@ impl Args {
         args: impl Into<VecDeque<RuntimeVal>>,
         src: ProgramSrc,
         span: Span,
-        name: String,
+        name: Rc<str>,
     ) -> Self {
         Self {
             args: args.into(),
@@ -661,7 +661,7 @@ impl Args {
         }
     }
 
-    fn next_string(&mut self) -> Result<String, RuntimeError> {
+    fn next_string(&mut self) -> Result<Rc<str>, RuntimeError> {
         self.count += 1;
         match self.args.pop_front().unwrap() {
             RuntimeVal::String(s) => Ok(s),
@@ -733,7 +733,7 @@ fn builtin_substr(mut args: Args) -> Res<RuntimeVal> {
     );
 
     Ok(RuntimeVal::String(
-        string[(start as usize)..(end as usize)].to_string(),
+        string[(start as usize)..(end as usize)].into(),
     ))
 }
 

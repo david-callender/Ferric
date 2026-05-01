@@ -49,7 +49,7 @@ pub fn ferric(src: &str, output: HtmlPreElement) {
     let parser_time = Utc::now() - parser_start;
 
     let interpreter_start = Utc::now();
-    let mut interpreter = Interpreter::new(&mut output);
+    let mut interpreter = Interpreter::new(src, &mut output);
     interpreter.interpret(&program).unwrap();
     let interpreter_time = Utc::now() - interpreter_start;
 

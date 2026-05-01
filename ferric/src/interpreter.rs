@@ -52,6 +52,32 @@ pub enum RuntimeError {
         span: Span,
         actual: RuntimeVal,
     },
+
+    #[error("Invalid argument {arg_index} in built-in function {name}\n{}", .span.format(src, &format!("this argument was expected to have type {expected}, but it had type {actual:#}")))]
+    InvalidArg {
+        src: ProgramSrc,
+        span: Span,
+        name: String,
+        arg_index: usize,
+        expected: &'static str,
+        actual: RuntimeVal,
+    },
+
+    #[error("Invalid arguments for built-in function {name}\n{}", .span.format(src, &format!("this function expected {expected} arguments, but it got {actual}")))]
+    TooManyArgs {
+        src: ProgramSrc,
+        span: Span,
+        name: String,
+        expected: usize,
+        actual: usize,
+    },
+
+    #[error("Invalid arguments for built-in function {name}\n{}", .span.format(src, "this function expected more arguments"))]
+    NotEnoughArgs {
+        src: ProgramSrc,
+        span: Span,
+        name: String,
+    },
 }
 
 // Module error type
@@ -434,14 +460,14 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn call_function(&mut self, f: RuntimeVal, args: Vec<RuntimeVal>, s: Span) -> Res<RuntimeVal> {
         Ok(match f {
             RuntimeVal::Function(Function::BuiltIn(fn_name)) => {
-                let args = Args(args.into());
+                let args = Args::new(args, self.src.clone(), s, fn_name.clone());
                 match fn_name.as_str() {
-                    "print" => builtin_print(self, args),
-                    "substr" => builtin_substr(args),
-                    "len" => builtin_len(args),
-                    "clock" => builtin_clock(self, args),
-                    "unix_time" => builtin_unix_time(args),
-                    "sleep" => builtin_sleep(args),
+                    "print" => builtin_print(self, args)?,
+                    "substr" => builtin_substr(args)?,
+                    "len" => builtin_len(args)?,
+                    "clock" => builtin_clock(self, args)?,
+                    "unix_time" => builtin_unix_time(args)?,
+                    "sleep" => builtin_sleep(args)?,
                     _ => {
                         return Err(RuntimeError::InvalidBuiltinFunction {
                             src: self.src.clone(),
@@ -582,27 +608,71 @@ impl<'a, W: Write> Interpreter<'a, W> {
 // All of these must have type `fn(&mut Interpreter<'a, W>, Vec<RuntimeVal>) -> RuntimeVal`
 
 #[derive(Debug, Clone)]
-struct Args(VecDeque<RuntimeVal>);
+struct Args {
+    args: VecDeque<RuntimeVal>,
+    src: ProgramSrc,
+    span: Span,
+    count: usize,
+    name: String,
+}
 
 impl Args {
-    fn next_number(&mut self) -> f64 {
-        match self.0.pop_front().unwrap() {
-            RuntimeVal::Number(n) => n,
-            _ => panic!(),
+    fn new(
+        args: impl Into<VecDeque<RuntimeVal>>,
+        src: ProgramSrc,
+        span: Span,
+        name: String,
+    ) -> Self {
+        Self {
+            args: args.into(),
+            src,
+            span,
+            count: 0,
+            name,
+        }
+    }
+    fn next_number(&mut self) -> Result<f64, RuntimeError> {
+        self.count += 1;
+        match self.args.pop_front().unwrap() {
+            RuntimeVal::Number(n) => Ok(n),
+            actual => Err(RuntimeError::InvalidArg {
+                src: self.src.clone(),
+                span: self.span,
+                name: self.name.clone(),
+                arg_index: self.count,
+                expected: "number",
+                actual,
+            }),
         }
     }
 
-    fn next_int(&mut self) -> i64 {
-        match self.0.pop_front().unwrap() {
-            RuntimeVal::Number(n) if n.fract() == 0.0 => n as i64,
-            _ => panic!(),
+    fn next_int(&mut self) -> Result<i64, RuntimeError> {
+        self.count += 1;
+        match self.args.pop_front().unwrap() {
+            RuntimeVal::Number(n) if n.fract() == 0.0 => Ok(n as i64),
+            actual => Err(RuntimeError::InvalidArg {
+                src: self.src.clone(),
+                span: self.span,
+                name: self.name.clone(),
+                arg_index: self.count,
+                expected: "integer",
+                actual,
+            }),
         }
     }
 
-    fn next_string(&mut self) -> String {
-        match self.0.pop_front().unwrap() {
-            RuntimeVal::String(s) => s,
-            _ => panic!(),
+    fn next_string(&mut self) -> Result<String, RuntimeError> {
+        self.count += 1;
+        match self.args.pop_front().unwrap() {
+            RuntimeVal::String(s) => Ok(s),
+            actual => Err(RuntimeError::InvalidArg {
+                src: self.src.clone(),
+                span: self.span,
+                name: self.name.clone(),
+                arg_index: self.count,
+                expected: "string",
+                actual,
+            }),
         }
     }
 
@@ -613,31 +683,41 @@ impl Args {
     //     }
     // }
 
-    fn finish(self) {
-        assert_eq!(self.0.len(), 0);
+    fn finish(self) -> Res<()> {
+        let leftover = self.args.len();
+        if leftover != 0 {
+            return Err(RuntimeError::TooManyArgs {
+                src: self.src.clone(),
+                span: self.span,
+                name: self.name,
+                expected: self.count,
+                actual: self.count + leftover,
+            });
+        }
+        Ok(())
     }
 }
 
-fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Args) -> RuntimeVal {
+fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Args) -> Res<RuntimeVal> {
     // TODO: How to do format strings here, at some point
 
-    if args.0.is_empty() {
+    if args.args.is_empty() {
         writeln!(i.output).expect("Failed to write to output");
     } else {
-        for val in args.0 {
+        for val in args.args {
             write!(i.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
         }
         writeln!(i.output).expect("Failed to write to output");
     }
-    RuntimeVal::Null
+    Ok(RuntimeVal::Null)
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn builtin_substr(mut args: Args) -> RuntimeVal {
-    let string = args.next_string();
-    let start = args.next_int();
-    let end = args.next_int();
-    args.finish();
+fn builtin_substr(mut args: Args) -> Res<RuntimeVal> {
+    let string = args.next_string()?;
+    let start = args.next_int()?;
+    let end = args.next_int()?;
+    args.finish()?;
 
     assert!(
         start >= 0 && end >= 0,
@@ -652,34 +732,40 @@ fn builtin_substr(mut args: Args) -> RuntimeVal {
         "substr(): String ending index out of bounds: {end}"
     );
 
-    RuntimeVal::String(string[(start as usize)..(end as usize)].to_string())
+    Ok(RuntimeVal::String(
+        string[(start as usize)..(end as usize)].to_string(),
+    ))
 }
 
-fn builtin_len(mut args: Args) -> RuntimeVal {
-    let string = args.next_string();
-    args.finish();
+fn builtin_len(mut args: Args) -> Res<RuntimeVal> {
+    let string = args.next_string()?;
+    args.finish()?;
 
-    RuntimeVal::Number(string.len() as f64)
+    Ok(RuntimeVal::Number(string.len() as f64))
 }
 
-fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Args) -> RuntimeVal {
-    args.finish();
+fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Args) -> Res<RuntimeVal> {
+    args.finish()?;
 
-    RuntimeVal::Number((Utc::now() - i.start_time).as_seconds_f64())
+    Ok(RuntimeVal::Number(
+        (Utc::now() - i.start_time).as_seconds_f64(),
+    ))
 }
 
-fn builtin_unix_time(args: Args) -> RuntimeVal {
-    args.finish();
+fn builtin_unix_time(args: Args) -> Res<RuntimeVal> {
+    args.finish()?;
 
-    RuntimeVal::Number((Utc::now() - DateTime::UNIX_EPOCH).as_seconds_f64())
+    Ok(RuntimeVal::Number(
+        (Utc::now() - DateTime::UNIX_EPOCH).as_seconds_f64(),
+    ))
 }
 
-fn builtin_sleep(mut args: Args) -> RuntimeVal {
-    let n = args.next_number();
-    args.finish();
+fn builtin_sleep(mut args: Args) -> Res<RuntimeVal> {
+    let n = args.next_number()?;
+    args.finish()?;
 
     thread::sleep(Duration::from_secs_f64(n));
-    RuntimeVal::Null
+    Ok(RuntimeVal::Null)
 }
 
 #[cfg(test)]

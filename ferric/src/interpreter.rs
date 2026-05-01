@@ -1,13 +1,11 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::{fmt::Display, io::Write};
+use std::{
+    cell::RefCell, collections::VecDeque, fmt::Display, io::Write, rc::Rc, thread, time::Duration,
+};
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
 use crate::parser::{BinaryOp, Expr, ExprKind, UnaryOp};
-use std::thread;
-use std::time::Duration;
 
 #[derive(Debug, Error, Clone)]
 pub enum RuntimeError {
@@ -254,15 +252,18 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
     fn call_function(&mut self, fn_obj: RuntimeVal, args: Vec<RuntimeVal>) -> Res<RuntimeVal> {
         Ok(match fn_obj {
-            RuntimeVal::Function(Function::BuiltIn(fn_name)) => match fn_name.as_str() {
-                "print" => builtin_print(self, args),
-                "substr" => builtin_substr(self, args),
-                "len" => builtin_len(self, args),
-                "clock" => builtin_clock(self, args),
-                "unix_time" => builtin_unix_time(self, args),
-                "sleep" => builtin_sleep(self, args),
-                x => panic!("Function {x} was not found"),
-            },
+            RuntimeVal::Function(Function::BuiltIn(fn_name)) => {
+                let args = Args(args.into());
+                match fn_name.as_str() {
+                    "print" => builtin_print(self, args),
+                    "substr" => builtin_substr(args),
+                    "len" => builtin_len(args),
+                    "clock" => builtin_clock(self, args),
+                    "unix_time" => builtin_unix_time(args),
+                    "sleep" => builtin_sleep(args),
+                    x => panic!("Function {x} was not found"),
+                }
+            }
             RuntimeVal::Function(Function::Custom {
                 param_count,
                 body,
@@ -414,13 +415,50 @@ impl<'a, W: Write> Interpreter<'a, W> {
 // BUILT-IN FUNCTIONS
 // All of these must have type `fn(&mut Interpreter<'a, W>, Vec<RuntimeVal>) -> RuntimeVal`
 
-fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+#[derive(Debug, Clone)]
+struct Args(VecDeque<RuntimeVal>);
+
+impl Args {
+    fn next_number(&mut self) -> f64 {
+        match self.0.pop_front().unwrap() {
+            RuntimeVal::Number(n) => n,
+            _ => panic!(),
+        }
+    }
+
+    fn next_int(&mut self) -> i64 {
+        match self.0.pop_front().unwrap() {
+            RuntimeVal::Number(n) if n.fract() == 0.0 => n as i64,
+            _ => panic!(),
+        }
+    }
+
+    fn next_string(&mut self) -> String {
+        match self.0.pop_front().unwrap() {
+            RuntimeVal::String(s) => s,
+            _ => panic!(),
+        }
+    }
+
+    // fn next_bool(&mut self) -> bool {
+    //     match self.0.pop_front().unwrap() {
+    //         RuntimeVal::Boolean(b) => b,
+    //         _ => panic!(),
+    //     }
+    // }
+
+    fn finish(self) {
+        assert_eq!(self.0.len(), 0);
+    }
+}
+
+fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Args) -> RuntimeVal {
     // TODO: How to do format strings here, at some point
 
-    if args.is_empty() {
+    if args.0.is_empty() {
         writeln!(i.output).expect("Failed to write to output");
     } else {
-        for val in args {
+        for val in args.0 {
             write!(i.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
         }
         writeln!(i.output).expect("Failed to write to output");
@@ -429,107 +467,53 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) ->
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn builtin_substr<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
+fn builtin_substr(mut args: Args) -> RuntimeVal {
+    let string = args.next_string();
+    let start = args.next_int();
+    let end = args.next_int();
+    args.finish();
+
     assert!(
-        args.len() == 3,
-        "substr(): Expect 3 args, got {}",
-        args.len(),
+        start >= 0 && end >= 0,
+        "substr(): String indices cannot be negative"
     );
-    if let RuntimeVal::String(string) = &args[0] {
-        let start = expect_int(
-            &args[1],
-            format!(
-                "substr(): Non-integer substring starting index: {}",
-                &args[1]
-            )
-            .as_str(),
-        );
-        let end = expect_int(
-            &args[2],
-            format!("substr(): Non-integer substring ending index: {}", &args[2]).as_str(),
-        );
-
-        assert!(
-            start >= 0 && end >= 0,
-            "substr(): String indices cannot be negative"
-        );
-        assert!(
-            start < string.len() as i64,
-            "substr(): String starting index out of bounds: {start}"
-        );
-        assert!(
-            end <= string.len() as i64,
-            "substr(): String ending index out of bounds: {end}"
-        );
-
-        return RuntimeVal::String(string[(start as usize)..(end as usize)].to_string());
-    }
-    panic!(
-        "substr(): Cannot take substring of non-string object: {}",
-        args[0]
+    assert!(
+        start < string.len() as i64,
+        "substr(): String starting index out of bounds: {start}"
     );
+    assert!(
+        end <= string.len() as i64,
+        "substr(): String ending index out of bounds: {end}"
+    );
+
+    RuntimeVal::String(string[(start as usize)..(end as usize)].to_string())
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn builtin_len<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
-    assert!(
-        args.len() == 1,
-        "len(): Expect 1 argument, got {}",
-        args.len()
-    );
-    match &args[0] {
-        RuntimeVal::String(string) => RuntimeVal::Number(string.len() as f64),
-        _ => panic!("len(): Object {} has no length property", &args[0]),
-    }
+fn builtin_len(mut args: Args) -> RuntimeVal {
+    let string = args.next_string();
+    args.finish();
+
+    RuntimeVal::Number(string.len() as f64)
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
-    assert!(
-        args.is_empty(),
-        "clock(): expected 0 args, got {}",
-        args.len()
-    );
+fn builtin_clock<W: Write>(i: &mut Interpreter<'_, W>, args: Args) -> RuntimeVal {
+    args.finish();
 
     RuntimeVal::Number((Utc::now() - i.start_time).as_seconds_f64())
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn builtin_unix_time<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
-    assert!(
-        args.is_empty(),
-        "unix_time: expected 0 args, got {}",
-        args.len()
-    );
+fn builtin_unix_time(args: Args) -> RuntimeVal {
+    args.finish();
 
     RuntimeVal::Number((Utc::now() - DateTime::UNIX_EPOCH).as_seconds_f64())
 }
 
-#[allow(clippy::needless_pass_by_value)]
-fn builtin_sleep<W: Write>(_: &mut Interpreter<'_, W>, args: Vec<RuntimeVal>) -> RuntimeVal {
-    assert!(
-        args.len() == 1,
-        "sleep(): expected 1 args, got {}",
-        args.len()
-    );
-    match args[0] {
-        RuntimeVal::Number(n) => {
-            thread::sleep(Duration::from_secs_f64(n));
-            RuntimeVal::Null
-        }
-        _ => panic!("Wrong arg type"),
-    }
-}
+fn builtin_sleep(mut args: Args) -> RuntimeVal {
+    let n = args.next_number();
+    args.finish();
 
-// HELPER FUNCTIONS
-fn expect_int(val: &RuntimeVal, message: &str) -> i64 {
-    match val {
-        RuntimeVal::Number(num) => {
-            assert!(num.fract() == 0.0, "{message}");
-            *num as i64
-        }
-        _ => panic!("{message}"),
-    }
+    thread::sleep(Duration::from_secs_f64(n));
+    RuntimeVal::Null
 }
 
 #[cfg(test)]

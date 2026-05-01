@@ -5,15 +5,29 @@ use std::{
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 
-use crate::parser::{BinaryOp, Expr, ExprKind, UnaryOp};
+use crate::{
+    loc::{ProgramSrc, ProgramSrcInner, Span},
+    parser::{BinaryOp, Expr, ExprKind, UnaryOp},
+};
 
 #[derive(Debug, Error, Clone)]
 pub enum RuntimeError {
-    #[error("binary type mismatch")]
-    BinaryTypeMismatch,
+    #[error("Binary type mismatch between {left:#} and {right:#}\n{}", .span.format(src, &format!("cannot {op} {left:#} and {right:#}")))]
+    BinaryTypeMismatch {
+        src: ProgramSrc,
+        span: Span,
+        op: BinaryOp,
+        left: RuntimeVal,
+        right: RuntimeVal,
+    },
 
-    #[error("unary type mismatch")]
-    UnaryTypeMismatch,
+    #[error("Unary type mismatch with {right}\n{}", .span.format(src, &format!("cannot {op} {right}")))]
+    UnaryTypeMismatch {
+        src: ProgramSrc,
+        span: Span,
+        op: UnaryOp,
+        right: RuntimeVal,
+    },
 }
 
 // Module error type
@@ -40,12 +54,22 @@ pub enum RuntimeVal {
 
 impl Display for RuntimeVal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Number(n) => write!(f, "{n}"),
-            Self::String(s) => write!(f, "{s}"),
-            Self::Boolean(b) => write!(f, "{b}"),
-            Self::Function(_) => write!(f, "function"),
-            Self::Null => write!(f, "Null"),
+        if f.alternate() {
+            match self {
+                Self::Number(_) => write!(f, "number"),
+                Self::String(_) => write!(f, "string"),
+                Self::Boolean(_) => write!(f, "boolean"),
+                Self::Function(_) => write!(f, "function"),
+                Self::Null => write!(f, "null"),
+            }
+        } else {
+            match self {
+                Self::Number(n) => write!(f, "{n}"),
+                Self::String(s) => write!(f, "{s}"),
+                Self::Boolean(b) => write!(f, "{b}"),
+                Self::Function(_) => write!(f, "function"),
+                Self::Null => write!(f, "Null"),
+            }
         }
     }
 }
@@ -112,141 +136,235 @@ impl Environment {
     }
 }
 
-fn operation_add(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 + n2)),
-        (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
-            s1.push_str(&s2);
-            Ok(RuntimeVal::String(s1))
-        }
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_multiply(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 * n2)),
-        (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
-            assert!(n.fract() != 0.0, "You can't multiply a string by a float!");
-
-            s1 = s1.repeat(n as usize);
-
-            Ok(RuntimeVal::String(s1))
-        }
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_subtract(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 - n2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_divide(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 / n2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_modulo(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 % n2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn unary_num_negate(right: RuntimeVal) -> Res<RuntimeVal> {
-    match right {
-        RuntimeVal::Number(n) => Ok(RuntimeVal::Number(-n)),
-        _ => Err(RuntimeError::UnaryTypeMismatch),
-    }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn unary_bool_not(right: RuntimeVal) -> Res<RuntimeVal> {
-    match right {
-        RuntimeVal::Boolean(b) => Ok(RuntimeVal::Boolean(!b)),
-        _ => Err(RuntimeError::UnaryTypeMismatch),
-    }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn unary_bit_not(right: RuntimeVal) -> Res<RuntimeVal> {
-    match right {
-        RuntimeVal::Number(n) => {
-            assert!(n.fract() == 0.0, "You can't bang a float!"); // TODO : Update Error messages
-            Ok(RuntimeVal::Number(!(n as i64) as f64))
-        }
-        _ => Err(RuntimeError::UnaryTypeMismatch),
-    }
-}
-
-#[allow(clippy::float_cmp)]
-fn operation_equal(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 == n2)),
-        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 == s2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-#[allow(clippy::float_cmp)]
-fn operation_neq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 != n2)),
-        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 != s2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_greater_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 > n2)),
-        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 > s2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_less_than(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 < n2)),
-        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 < s2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_geq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 >= n2)),
-        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 >= s2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
-fn operation_leq(left: RuntimeVal, right: RuntimeVal) -> Res<RuntimeVal> {
-    match (left, right) {
-        (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 <= n2)),
-        (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 <= s2)),
-        _ => Err(RuntimeError::BinaryTypeMismatch),
-    }
-}
-
 pub struct Interpreter<'a, W: Write> {
+    src: ProgramSrc,
     output: &'a mut W,
     env: Environment,
     start_time: DateTime<Utc>,
 }
 
 impl<'a, W: Write> Interpreter<'a, W> {
-    pub fn new(output: &'a mut W) -> Self {
+    pub fn new(src: ProgramSrc, output: &'a mut W) -> Self {
         Self {
+            src,
             output,
             env: Environment::new_global(),
             start_time: Utc::now(),
+        }
+    }
+
+    pub fn test(output: &'a mut W) -> Self {
+        Self {
+            src: Rc::new(ProgramSrcInner::new(String::new())),
+            output,
+            env: Environment::new_global(),
+            start_time: Utc::now(),
+        }
+    }
+
+    fn operation_add(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 + n2)),
+            (RuntimeVal::String(mut s1), RuntimeVal::String(s2)) => {
+                s1.push_str(&s2);
+                Ok(RuntimeVal::String(s1))
+            }
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::Add,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_multiply(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 * n2)),
+            (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
+                assert!(n.fract() != 0.0, "You can't multiply a string by a float!");
+
+                s1 = s1.repeat(n as usize);
+
+                Ok(RuntimeVal::String(s1))
+            }
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::Multiply,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_subtract(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 - n2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::Subtract,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_divide(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 / n2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::Divide,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_modulo(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 % n2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::Modulo,
+                left,
+                right,
+            }),
+        }
+    }
+
+    #[allow(clippy::float_cmp)]
+    fn operation_equal(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 == n2)),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 == s2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::Equal,
+                left,
+                right,
+            }),
+        }
+    }
+
+    #[allow(clippy::float_cmp)]
+    fn operation_neq(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 != n2)),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 != s2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::NotEqual,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_greater_than(
+        &self,
+        left: RuntimeVal,
+        right: RuntimeVal,
+        s: Span,
+    ) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 > n2)),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 > s2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::GreaterThan,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_less_than(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 < n2)),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 < s2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::LessThan,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_geq(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 >= n2)),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 >= s2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::GreaterEq,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn operation_leq(&self, left: RuntimeVal, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match (left, right) {
+            (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Boolean(n1 <= n2)),
+            (RuntimeVal::String(s1), RuntimeVal::String(s2)) => Ok(RuntimeVal::Boolean(s1 <= s2)),
+            (left, right) => Err(RuntimeError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: BinaryOp::LessEq,
+                left,
+                right,
+            }),
+        }
+    }
+
+    fn unary_num_negate(&self, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match right {
+            RuntimeVal::Number(n) => Ok(RuntimeVal::Number(-n)),
+            _ => Err(RuntimeError::UnaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: UnaryOp::Negate,
+                right,
+            }),
+        }
+    }
+
+    fn unary_bool_not(&self, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match right {
+            RuntimeVal::Boolean(b) => Ok(RuntimeVal::Boolean(!b)),
+            _ => Err(RuntimeError::UnaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: UnaryOp::BoolNot,
+                right,
+            }),
+        }
+    }
+
+    fn unary_bit_not(&self, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
+        match right {
+            RuntimeVal::Number(n) => {
+                assert!(n.fract() == 0.0, "You can't bang a float!"); // TODO : Update Error messages
+                Ok(RuntimeVal::Number(!(n as i64) as f64))
+            }
+            _ => Err(RuntimeError::UnaryTypeMismatch {
+                src: self.src.clone(),
+                span: s,
+                op: UnaryOp::BitNot,
+                right,
+            }),
         }
     }
 
@@ -306,25 +424,33 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 let left_val = self.evaluate(left)?;
                 let right_val = self.evaluate(right)?;
                 match operation {
-                    BinaryOp::Add => operation_add(left_val, right_val)?,
-                    BinaryOp::Subtract => operation_subtract(left_val, right_val)?,
-                    BinaryOp::Multiply => operation_multiply(left_val, right_val)?,
-                    BinaryOp::Divide => operation_divide(left_val, right_val)?,
-                    BinaryOp::Modulo => operation_modulo(left_val, right_val)?,
-                    BinaryOp::Equal => operation_equal(left_val, right_val)?,
-                    BinaryOp::NotEqual => operation_neq(left_val, right_val)?,
-                    BinaryOp::GreaterThan => operation_greater_than(left_val, right_val)?,
-                    BinaryOp::LessThan => operation_less_than(left_val, right_val)?,
-                    BinaryOp::GreaterEq => operation_geq(left_val, right_val)?,
-                    BinaryOp::LessEq => operation_leq(left_val, right_val)?,
+                    BinaryOp::Add => self.operation_add(left_val, right_val, expr.span)?,
+                    BinaryOp::Subtract => {
+                        self.operation_subtract(left_val, right_val, expr.span)?
+                    }
+                    BinaryOp::Multiply => {
+                        self.operation_multiply(left_val, right_val, expr.span)?
+                    }
+                    BinaryOp::Divide => self.operation_divide(left_val, right_val, expr.span)?,
+                    BinaryOp::Modulo => self.operation_modulo(left_val, right_val, expr.span)?,
+                    BinaryOp::Equal => self.operation_equal(left_val, right_val, expr.span)?,
+                    BinaryOp::NotEqual => self.operation_neq(left_val, right_val, expr.span)?,
+                    BinaryOp::GreaterThan => {
+                        self.operation_greater_than(left_val, right_val, expr.span)?
+                    }
+                    BinaryOp::LessThan => {
+                        self.operation_less_than(left_val, right_val, expr.span)?
+                    }
+                    BinaryOp::GreaterEq => self.operation_geq(left_val, right_val, expr.span)?,
+                    BinaryOp::LessEq => self.operation_leq(left_val, right_val, expr.span)?,
                 }
             }
             ExprKind::Unary { operation, right } => {
                 let right_val = self.evaluate(right)?;
                 match operation {
-                    UnaryOp::Negate => unary_num_negate(right_val)?,
-                    UnaryOp::BitNot => unary_bit_not(right_val)?,
-                    UnaryOp::BoolNot => unary_bool_not(right_val)?,
+                    UnaryOp::Negate => self.unary_num_negate(right_val, expr.span)?,
+                    UnaryOp::BitNot => self.unary_bit_not(right_val, expr.span)?,
+                    UnaryOp::BoolNot => self.unary_bool_not(right_val, expr.span)?,
                 }
             }
             ExprKind::Call { callee, args } => {
@@ -535,7 +661,7 @@ mod tests {
 
         let expr = expr!(NumLit(5.0));
 
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
         let res = interpreter.evaluate(&expr).unwrap();
 
         assert_eq!(res, RuntimeVal::Number(5.0));
@@ -550,7 +676,7 @@ mod tests {
             expr!(Call(Ident("print"), [NumLit(5.0)])),
         ];
 
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
         interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"4\n5\n");
@@ -576,7 +702,7 @@ mod tests {
             )]
         ))];
 
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
         interpreter.interpret(&expr).unwrap();
 
         assert_eq!(out, b"bar\n");
@@ -585,7 +711,7 @@ mod tests {
     #[test]
     fn binary_ops_int() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
 
         let expr = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
         assert_eq!(
@@ -621,7 +747,7 @@ mod tests {
     #[test]
     fn binary_ops_bool() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
 
         let expr = expr!(Binary(NumLit(4.0), GreaterThan, NumLit(5.0)));
         assert_eq!(
@@ -664,7 +790,7 @@ mod tests {
     fn unary_int() {
         // bit not on numbers
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
 
         let expr = expr!(Unary(BitNot, NumLit(0.0)));
         assert_eq!(
@@ -688,7 +814,7 @@ mod tests {
     #[test]
     fn unary_num_() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
 
         let expr = expr!(Unary(BoolNot, BoolLit(true)));
         assert_eq!(
@@ -706,7 +832,7 @@ mod tests {
     #[test]
     fn test_var_set() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
 
         let expr = expr!(Block {
             Decl(NumLit(4.0)),
@@ -723,7 +849,7 @@ mod tests {
     #[test]
     fn clock() {
         let mut out = sink();
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
 
         let expr = expr!(Block {
             Call(Ident("sleep"), [NumLit(1.0)]),
@@ -750,7 +876,7 @@ mod tests {
         let eps = 1.0;
         let expr = expr!(Call(Ident("unix_time"), []));
 
-        let mut interpreter = Interpreter::new(&mut out);
+        let mut interpreter = Interpreter::test(&mut out);
 
         interpreter.evaluate(&expr).unwrap();
         let RuntimeVal::Number(c) = interpreter.evaluate(&expr).unwrap() else {

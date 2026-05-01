@@ -16,7 +16,7 @@ fn ferric_main(source: String) -> Result<(), FerricError> {
 
     let mut output = stdout();
 
-    let mut interpreter = Interpreter::new(&mut output);
+    let mut interpreter = Interpreter::new(src, &mut output);
     interpreter.interpret(&expr)?;
 
     Ok(())

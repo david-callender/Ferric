@@ -144,11 +144,39 @@ pub enum BinaryOp {
     LessEq,
 }
 
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => write!(f, "add"),
+            Self::Subtract => write!(f, "subtract"),
+            Self::Multiply => write!(f, "multiply"),
+            Self::Divide => write!(f, "divide"),
+            Self::Modulo => write!(f, "calculate modulo between"),
+            Self::Equal
+            | Self::NotEqual
+            | Self::GreaterThan
+            | Self::LessThan
+            | Self::GreaterEq
+            | Self::LessEq => write!(f, "compare"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Negate,
     BitNot,
     BoolNot,
+}
+
+impl std::fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Negate => write!(f, "negate"),
+            Self::BitNot => write!(f, "bitwise not"),
+            Self::BoolNot => write!(f, "boolean negate"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -215,6 +243,7 @@ fn type_of_unaryop(kind: &UnaryOp, typ_right: &Typ) -> Typ {
 }
 
 fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
+    return Typ::Any;
     if *typ_left == Typ::Any || *typ_right == Typ::Any {
         return Typ::Any;
     }

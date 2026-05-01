@@ -28,6 +28,30 @@ pub enum RuntimeError {
         op: UnaryOp,
         right: RuntimeVal,
     },
+
+    #[error("Expected an integer\n{}", .span.format(src, message))]
+    ExpectedInt {
+        src: ProgramSrc,
+        span: Span,
+        message: &'static str,
+    },
+
+    #[error("Invalid function object\n{}", .span.format(src, &format!("this object of type {obj:#} is not callable")))]
+    InvalidFunctionObject {
+        src: ProgramSrc,
+        span: Span,
+        obj: RuntimeVal,
+    },
+
+    #[error("Invalid builtin function\n{}", .span.format(src, "this is not a valid builtin function"))]
+    InvalidBuiltinFunction { src: ProgramSrc, span: Span },
+
+    #[error("Invalid condition\n{}", .span.format(src, &format!("this condition must be a boolean, but it is a {actual:#}")))]
+    InvalidCondition {
+        src: ProgramSrc,
+        span: Span,
+        actual: RuntimeVal,
+    },
 }
 
 // Module error type
@@ -183,7 +207,13 @@ impl<'a, W: Write> Interpreter<'a, W> {
         match (left, right) {
             (RuntimeVal::Number(n1), RuntimeVal::Number(n2)) => Ok(RuntimeVal::Number(n1 * n2)),
             (RuntimeVal::String(mut s1), RuntimeVal::Number(n)) => {
-                assert!(n.fract() != 0.0, "You can't multiply a string by a float!");
+                if n.fract() != 0.0 {
+                    return Err(RuntimeError::ExpectedInt {
+                        src: self.src.clone(),
+                        span: s,
+                        message: "string repeat count must be an integer",
+                    });
+                }
 
                 s1 = s1.repeat(n as usize);
 
@@ -356,7 +386,13 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn unary_bit_not(&self, right: RuntimeVal, s: Span) -> Res<RuntimeVal> {
         match right {
             RuntimeVal::Number(n) => {
-                assert!(n.fract() == 0.0, "You can't bang a float!"); // TODO : Update Error messages
+                if n.fract() != 0.0 {
+                    return Err(RuntimeError::ExpectedInt {
+                        src: self.src.clone(),
+                        span: s,
+                        message: "unary bit not expects an integer",
+                    });
+                }
                 Ok(RuntimeVal::Number(!(n as i64) as f64))
             }
             _ => Err(RuntimeError::UnaryTypeMismatch {
@@ -368,8 +404,35 @@ impl<'a, W: Write> Interpreter<'a, W> {
         }
     }
 
-    fn call_function(&mut self, fn_obj: RuntimeVal, args: Vec<RuntimeVal>) -> Res<RuntimeVal> {
-        Ok(match fn_obj {
+    fn binary(&mut self, left: &Expr, op: BinaryOp, right: &Expr, span: Span) -> Res<RuntimeVal> {
+        let left_val = self.evaluate(left)?;
+        let right_val = self.evaluate(right)?;
+        Ok(match op {
+            BinaryOp::Add => self.operation_add(left_val, right_val, span)?,
+            BinaryOp::Subtract => self.operation_subtract(left_val, right_val, span)?,
+            BinaryOp::Multiply => self.operation_multiply(left_val, right_val, span)?,
+            BinaryOp::Divide => self.operation_divide(left_val, right_val, span)?,
+            BinaryOp::Modulo => self.operation_modulo(left_val, right_val, span)?,
+            BinaryOp::Equal => self.operation_equal(left_val, right_val, span)?,
+            BinaryOp::NotEqual => self.operation_neq(left_val, right_val, span)?,
+            BinaryOp::GreaterThan => self.operation_greater_than(left_val, right_val, span)?,
+            BinaryOp::LessThan => self.operation_less_than(left_val, right_val, span)?,
+            BinaryOp::GreaterEq => self.operation_geq(left_val, right_val, span)?,
+            BinaryOp::LessEq => self.operation_leq(left_val, right_val, span)?,
+        })
+    }
+
+    fn unary(&mut self, op: UnaryOp, right: &Expr, expr: &Expr) -> Res<RuntimeVal> {
+        let right_val = self.evaluate(right)?;
+        Ok(match op {
+            UnaryOp::Negate => self.unary_num_negate(right_val, expr.span)?,
+            UnaryOp::BitNot => self.unary_bit_not(right_val, expr.span)?,
+            UnaryOp::BoolNot => self.unary_bool_not(right_val, expr.span)?,
+        })
+    }
+
+    fn call_function(&mut self, f: RuntimeVal, args: Vec<RuntimeVal>, s: Span) -> Res<RuntimeVal> {
+        Ok(match f {
             RuntimeVal::Function(Function::BuiltIn(fn_name)) => {
                 let args = Args(args.into());
                 match fn_name.as_str() {
@@ -379,7 +442,12 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     "clock" => builtin_clock(self, args),
                     "unix_time" => builtin_unix_time(args),
                     "sleep" => builtin_sleep(args),
-                    x => panic!("Function {x} was not found"),
+                    _ => {
+                        return Err(RuntimeError::InvalidBuiltinFunction {
+                            src: self.src.clone(),
+                            span: s,
+                        });
+                    }
                 }
             }
             RuntimeVal::Function(Function::Custom {
@@ -396,7 +464,13 @@ impl<'a, W: Write> Interpreter<'a, W> {
 
                 self.evaluate_block(body.as_ref(), func_env)?
             }
-            _ => panic!("Invalid function call"),
+            obj => {
+                return Err(RuntimeError::InvalidFunctionObject {
+                    src: self.src.clone(),
+                    span: s,
+                    obj,
+                });
+            }
         })
     }
 
@@ -416,43 +490,8 @@ impl<'a, W: Write> Interpreter<'a, W> {
     fn evaluate(&mut self, expr: &Expr) -> Res<RuntimeVal> {
         Ok(match &expr.kind {
             ExprKind::Literal(runtime_val) => runtime_val.clone(),
-            ExprKind::Binary {
-                left,
-                operation,
-                right,
-            } => {
-                let left_val = self.evaluate(left)?;
-                let right_val = self.evaluate(right)?;
-                match operation {
-                    BinaryOp::Add => self.operation_add(left_val, right_val, expr.span)?,
-                    BinaryOp::Subtract => {
-                        self.operation_subtract(left_val, right_val, expr.span)?
-                    }
-                    BinaryOp::Multiply => {
-                        self.operation_multiply(left_val, right_val, expr.span)?
-                    }
-                    BinaryOp::Divide => self.operation_divide(left_val, right_val, expr.span)?,
-                    BinaryOp::Modulo => self.operation_modulo(left_val, right_val, expr.span)?,
-                    BinaryOp::Equal => self.operation_equal(left_val, right_val, expr.span)?,
-                    BinaryOp::NotEqual => self.operation_neq(left_val, right_val, expr.span)?,
-                    BinaryOp::GreaterThan => {
-                        self.operation_greater_than(left_val, right_val, expr.span)?
-                    }
-                    BinaryOp::LessThan => {
-                        self.operation_less_than(left_val, right_val, expr.span)?
-                    }
-                    BinaryOp::GreaterEq => self.operation_geq(left_val, right_val, expr.span)?,
-                    BinaryOp::LessEq => self.operation_leq(left_val, right_val, expr.span)?,
-                }
-            }
-            ExprKind::Unary { operation, right } => {
-                let right_val = self.evaluate(right)?;
-                match operation {
-                    UnaryOp::Negate => self.unary_num_negate(right_val, expr.span)?,
-                    UnaryOp::BitNot => self.unary_bit_not(right_val, expr.span)?,
-                    UnaryOp::BoolNot => self.unary_bool_not(right_val, expr.span)?,
-                }
-            }
+            ExprKind::Binary { left, op, right } => self.binary(left, *op, right, expr.span)?,
+            ExprKind::Unary { op, right } => self.unary(*op, right, expr)?,
             ExprKind::Call { callee, args } => {
                 let func_caller = self.evaluate(callee)?;
                 let args = args
@@ -460,12 +499,9 @@ impl<'a, W: Write> Interpreter<'a, W> {
                     .map(|expr| self.evaluate(expr))
                     .collect::<Res<Vec<RuntimeVal>>>()?;
 
-                self.call_function(func_caller, args)?
+                self.call_function(func_caller, args, expr.span)?
             }
-            ExprKind::Ident(name) => {
-                // check if function exists
-                RuntimeVal::Function(Function::BuiltIn(name.clone()))
-            }
+            ExprKind::Ident(name) => RuntimeVal::Function(Function::BuiltIn(name.clone())),
             ExprKind::Decl { value } => {
                 let val = self.evaluate(value)?;
                 self.env.declare(val);
@@ -501,8 +537,12 @@ impl<'a, W: Write> Interpreter<'a, W> {
                             RuntimeVal::Null
                         }
                     }
-                    _ => {
-                        panic!("Tried to read non-boolean expression as condition");
+                    actual => {
+                        return Err(RuntimeError::InvalidCondition {
+                            src: self.src.clone(),
+                            span: expr.span,
+                            actual,
+                        });
                     }
                 }
             }
@@ -510,22 +550,22 @@ impl<'a, W: Write> Interpreter<'a, W> {
                 self.evaluate_block(expressions, Environment::new(self.env.clone()))?
             }
             ExprKind::While { cond, body } => {
-                let RuntimeVal::Boolean(mut while_cond) = self.evaluate(cond)? else {
-                    panic!("While condition not boolean expression!");
-                };
-
-                while while_cond {
-                    self.evaluate_block(body, Environment::new(self.env.clone()))?;
-
-                    while_cond = match self.evaluate(cond)? {
+                while {
+                    match self.evaluate(cond)? {
                         RuntimeVal::Boolean(b) => b,
-                        _ => {
-                            panic!("While condition not boolean expression!")
+                        actual => {
+                            return Err(RuntimeError::InvalidCondition {
+                                src: self.src.clone(),
+                                span: expr.span,
+                                actual,
+                            });
                         }
-                    };
+                    }
+                } {
+                    self.evaluate_block(body, Environment::new(self.env.clone()))?;
                 }
 
-                RuntimeVal::Null // temp, TODO: handle .collect()
+                RuntimeVal::Null
             }
         })
     }

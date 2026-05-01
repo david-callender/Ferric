@@ -44,13 +44,13 @@ macro_rules! expr {
     (Binary($ln:ident$l:tt, $op:ident, $rn:ident$r:tt)) => {
         Expr { kind: ExprKind::Binary {
             left: Box::new(expr!($ln$l)),
-            operation: BinaryOp::$op,
+            op: BinaryOp::$op,
             right: Box::new(expr!($rn$r)),
         }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };
     (Unary($op:ident, $rn:ident$r:tt)) => {
         Expr { kind: ExprKind::Unary {
-            operation: UnaryOp::$op,
+            op: UnaryOp::$op,
             right: Box::new(expr!($rn$r)),
         }, span: Span::new(Loc::new(1, 1), Loc::new(1, 1)) }
     };

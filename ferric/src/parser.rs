@@ -61,11 +61,11 @@ pub enum ExprKind {
     Ident(String),
     Binary {
         left: Box<Expr>,
-        operation: BinaryOp,
+        op: BinaryOp,
         right: Box<Expr>,
     },
     Unary {
-        operation: UnaryOp,
+        op: UnaryOp,
         right: Box<Expr>,
     },
     Call {
@@ -112,7 +112,7 @@ impl Expr {
             span: left.span + right.span,
             kind: ExprKind::Binary {
                 left: Box::new(left),
-                operation,
+                op: operation,
                 right: Box::new(right),
             },
         }
@@ -122,14 +122,14 @@ impl Expr {
         Expr {
             span: op_span + right.span,
             kind: ExprKind::Unary {
-                operation,
+                op: operation,
                 right: Box::new(right),
             },
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
     Add,
     Subtract,
@@ -162,7 +162,7 @@ impl std::fmt::Display for BinaryOp {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOp {
     Negate,
     BitNot,
@@ -231,7 +231,7 @@ impl EnvStackFrame {
     }
 }
 
-fn type_of_unaryop(kind: &UnaryOp, typ_right: &Typ) -> Typ {
+fn type_of_unaryop(kind: UnaryOp, typ_right: &Typ) -> Typ {
     match (kind, typ_right) {
         (_, Typ::Any) => Typ::Any,
         (UnaryOp::Negate | UnaryOp::BitNot, Typ::Number) => Typ::Number,
@@ -242,8 +242,7 @@ fn type_of_unaryop(kind: &UnaryOp, typ_right: &Typ) -> Typ {
     }
 }
 
-fn type_of_binaryop(typ_left: &Typ, kind: &BinaryOp, typ_right: &Typ) -> Typ {
-    return Typ::Any;
+fn type_of_binaryop(typ_left: &Typ, kind: BinaryOp, typ_right: &Typ) -> Typ {
     if *typ_left == Typ::Any || *typ_right == Typ::Any {
         return Typ::Any;
     }
@@ -448,17 +447,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 );
                 self.env[*depth].typs[*slot].clone()
             }
-            ExprKind::Unary {
-                operation: kind,
-                right,
-            } => type_of_unaryop(kind, &self.type_of(right.as_ref())),
-            ExprKind::Binary {
-                left,
-                operation: kind,
-                right,
-            } => type_of_binaryop(
+            ExprKind::Unary { op, right } => type_of_unaryop(*op, &self.type_of(right.as_ref())),
+            ExprKind::Binary { left, op, right } => type_of_binaryop(
                 &self.type_of(left.as_ref()),
-                kind,
+                *op,
                 &self.type_of(right.as_ref()),
             ),
             ExprKind::Call { callee, args: _ } => match self.type_of(callee) {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, rc::Rc, string::FromUtf8Error, vec};
+use std::{collections::{HashMap, HashSet}, iter::Peekable, rc::Rc, string::FromUtf8Error, vec};
 
 use thiserror::Error;
 
@@ -130,9 +130,11 @@ impl std::fmt::Display for Token {
     }
 }
 
+
 pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
     keywords: HashMap<&'static str, Token>,
+    str_buf_set: HashSet<Rc<str>>,
     src: ProgramSrc,
     line: usize,
     col: usize,
@@ -163,6 +165,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         Self {
             stream: stream.peekable(),
             keywords,
+            str_buf_set: HashSet::new(),
             src,
             line: 1,
             col: 1,
@@ -183,6 +186,15 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             self.col += 1;
         }
         Some((n, this))
+    }
+
+    fn process_str_buf(&mut self, buf: String) -> Rc<str> {
+        let buf: Rc<str> = buf.into();
+        if let Some(prev) = self.str_buf_set.get(&buf) {
+            return Rc::clone(prev);
+        }
+        self.str_buf_set.insert(Rc::clone(&buf));
+        buf
     }
 
     fn lex_byte(&mut self, c: u8, loc: Loc) -> Result<Lexeme, LexerError> {
@@ -315,7 +327,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
         let tok = if let Some(keyword) = self.keywords.get(ident.as_str()) {
             keyword.clone()
         } else {
-            Token::Ident(ident.into())
+            Token::Ident(self.process_str_buf(ident))
         };
 
         Ok(Lexeme::new(tok, span))
@@ -334,7 +346,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
                 let span = Span::new(start, end);
                 let st = String::from_utf8(st)
                     .map_err(|err| LexerError::StrLitInvalidUtf8(self.src.clone(), span, err))?;
-                return Ok(Lexeme::new(Token::StringLit(st.into()), span));
+                return Ok(Lexeme::new(Token::StringLit(self.process_str_buf(st)), span));
             }
             if s == b'\\' {
                 // should be made into its own error

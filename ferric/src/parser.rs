@@ -648,7 +648,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                             span: lexeme.span,
                             kind: ExprKind::VarGet { depth, slot },
                         },
-                        self.env[depth].typs[slot].clone(),
+                        self.env[self.env.len() - depth - 1].typs[slot].clone(),
                     )
                 },
             ),
@@ -666,6 +666,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 )
             }
             Token::While => self.parse_while(lexeme.span)?,
+            Token::For => self.parse_for(lexeme.span)?,
             _ => {
                 return Err(ParserError::Unexpected {
                     src: self.src.clone(),
@@ -841,6 +842,46 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     body,
                 },
                 span: while_span + close,
+            },
+            Typ::Null,
+        ))
+    }
+
+    fn parse_for(&mut self, for_span: Span) -> Res<(Expr, Typ)> {
+        self.env.push(EnvStackFrame::new());
+        let (init, _) = self.parse_expr()?;
+        self.consume(Token::Semi, "Expected ';' after for loop init")?;
+        let (cond, cond_typ) = self.parse_expr()?;
+        assert!(
+            &cond_typ.can_coerce(&Typ::Bool),
+            "conditions must be a boolean"
+        );
+        self.consume(Token::Semi, "Expected ';' after for loop condition")?;
+
+        self.env.push(EnvStackFrame::new());
+        let (update, _) = self.parse_expr()?;
+
+        let open = self.consume(Token::OpenBracket, "Expected '{' after 'for'")?;
+
+        let (body, close, _) = self.parse_block(EnvStackFrame::new())?;
+
+        let inner = Expr {
+            kind: ExprKind::While {
+                cond: Box::new(cond),
+                body: vec![
+                    Expr {
+                        kind: ExprKind::Block(body),
+                        span: open.span + close,
+                    },
+                    update,
+                ],
+            },
+            span: for_span + close,
+        };
+        Ok((
+            Expr {
+                kind: ExprKind::Block(vec![init, inner]),
+                span: for_span + close,
             },
             Typ::Null,
         ))

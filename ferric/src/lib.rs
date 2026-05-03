@@ -31,7 +31,9 @@ mod tests {
 
         let mut output = vec![];
 
-        Interpreter::new(src.clone(), &mut output).interpret(&expr).unwrap();
+        Interpreter::new(src.clone(), &mut output)
+            .interpret(&expr)
+            .unwrap();
 
         String::from_utf8(output).expect("Program outputted invalid utf8")
     }

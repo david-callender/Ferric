@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! matches_many {
-    ($self:expr, $($kind:ident($name:tt) => $body:expr),* ,  _ => $last:expr) => {
+    ($self:expr, $($kind:ident($name:tt) => $body:expr),* , _ => $last:expr $(,)?) => {
         match () {
             $(
                 () if let Some($name) = $self.matches(Token::$kind)? => {$body},

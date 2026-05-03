@@ -190,6 +190,15 @@ pub enum Typ {
     Bool,
 }
 
+impl Typ {
+    fn can_coerce(&self, into: &Self) -> bool {
+        if self == &Typ::Any || into == &Typ::Any {
+            return true;
+        }
+        self == into
+    }
+}
+
 impl Eq for Typ {}
 
 impl Display for Typ {
@@ -205,7 +214,7 @@ impl Display for Typ {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct EnvStackFrame {
     next_index: usize,
     frame: HashMap<Rc<str>, usize>,
@@ -349,18 +358,6 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    #[allow(clippy::needless_pass_by_value)]
-    fn is_one_of<const N: usize>(&mut self, expected: [Token; N]) -> Option<Token> {
-        if self
-            .stream
-            .peek()
-            .is_some_and(|x| x.as_ref().is_ok_and(|x| expected.contains(&x.t)))
-        {
-            return Some(self.stream.next().unwrap().unwrap().t);
-        }
-        None
-    }
-
     fn consume(&mut self, expected: Token, message: &'static str) -> Res<Lexeme> {
         let token = self.next()?.ok_or_else(|| ParserError::ExpectedGotNone {
             expected: expected.clone(),
@@ -395,12 +392,20 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     // consume_parameters assumes that the initial opening paren has
     // already been parsed.
-    fn consume_parameters(&mut self) -> Res<Vec<Rc<str>>> {
-        let mut parameters: Vec<Rc<str>> = Vec::new();
+    fn consume_parameters(&mut self) -> Res<Vec<(Rc<str>, Typ)>> {
+        let mut parameters = Vec::new();
         if self.matches(Token::CloseParen)?.is_none() {
-            parameters.push(self.consume_ident("Function parameters may only be idents")?);
+            parameters.push((
+                self.consume_ident("Function parameters may only be idents")?,
+                self.parse_typ()?
+                    .expect("function declarations require types"),
+            ));
             while self.matches(Token::Comma)?.is_some() {
-                parameters.push(self.consume_ident("Function parameters may only be idents")?);
+                parameters.push((
+                    self.consume_ident("Function parameters may only be idents")?,
+                    self.parse_typ()?
+                        .expect("function declarations require types"),
+                ));
             }
             self.consume(
                 Token::CloseParen,
@@ -410,97 +415,10 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(parameters)
     }
 
-    fn type_of_block(&self, exprs: &[Expr]) -> Typ {
-        let mut typ = Typ::Null;
-        for expr in exprs {
-            typ = self.type_of(expr);
-        }
-        typ
-    }
-
-    fn type_of(&self, expr: &Expr) -> Typ {
-        match &expr.kind {
-            ExprKind::VarSet { .. } | ExprKind::Decl { .. } => Typ::Null,
-            ExprKind::While { cond, body } => {
-                assert_eq!(
-                    self.type_of(cond),
-                    Typ::Bool,
-                    "While conditions must be of boolean type",
-                );
-                self.type_of_block(body);
-                Typ::Null
-            }
-            ExprKind::Literal(kind) => match kind {
-                RuntimeVal::Number(_) => Typ::Number,
-                RuntimeVal::String(_) => Typ::String,
-                RuntimeVal::Boolean(_) => Typ::Bool,
-                RuntimeVal::Null => Typ::Null,
-                RuntimeVal::Function(_) => unreachable!("Function found in literal expr"),
-            },
-            ExprKind::VarGet { depth, slot } => {
-                assert!(
-                    *depth < self.env.len(),
-                    "Variable get references greater depth than stack size"
-                );
-                assert!(
-                    *slot < self.env[*depth].typs.len(),
-                    "Variable get references greater slot number than exists in referenced stack frame"
-                );
-                self.env[*depth].typs[*slot].clone()
-            }
-            ExprKind::Unary { op, right } => type_of_unaryop(*op, &self.type_of(right.as_ref())),
-            ExprKind::Binary { left, op, right } => type_of_binaryop(
-                &self.type_of(left.as_ref()),
-                *op,
-                &self.type_of(right.as_ref()),
-            ),
-            ExprKind::Call { callee, args: _ } => match self.type_of(callee) {
-                Typ::Any => Typ::Any,
-                Typ::Function { params: _, ret } => *ret,
-                _ => panic!("Attempted to call non-function expr"),
-            },
-            ExprKind::Block(exprs) => {
-                for expr in &exprs[..exprs.len() - 1] {
-                    self.type_of(expr);
-                }
-                self.type_of(exprs.last().expect("Block is entirely empty"))
-            }
-            ExprKind::Func {
-                param_count: _,
-                body,
-            } => Typ::Function {
-                params: Vec::new(),
-                ret: Box::new(self.type_of(body.last().expect("Function body is entirely empty"))),
-            },
-            ExprKind::If {
-                cond,
-                then,
-                otherwise,
-            } => {
-                assert_eq!(
-                    Typ::Bool,
-                    self.type_of(cond.as_ref()),
-                    "If condition is not of boolean type"
-                );
-                let typ_then = self.type_of_block(then);
-                if let Some(other) = otherwise {
-                    let typ_otherwise = self.type_of(other.as_ref());
-                    assert_eq!(
-                        typ_then, typ_otherwise,
-                        "All arms of an if-otherwise chain must evaluate to the same type"
-                    );
-                }
-                typ_then
-            }
-            ExprKind::Ident(string) => type_of_ident(string.as_ref()),
-        }
-    }
-
     pub fn parse(&mut self) -> Res<Vec<Expr>> {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
             let exp = self.parse_expr()?.0;
-            self.type_of(&exp); // panics if type error
             exprs.push(exp);
             self.consume(Token::Semi, "Expected ';' after expression")?;
         }
@@ -547,7 +465,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             let lhs_type = self.env[depth].typs[slot].clone();
 
             assert!(
-                rhs_type == lhs_type,
+                rhs_type.can_coerce(&lhs_type),
                 "Type error: expected {rhs_type}, got {lhs_type}"
             );
 
@@ -569,82 +487,75 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     fn parse_comparisons(&mut self) -> Res<(Expr, Typ)> {
         let (left, typ_left) = self.parse_add_subtract()?;
 
-        let operation = match self.is_one_of([
-            Token::Greater,
-            Token::GreaterEq,
-            Token::Less,
-            Token::LessEq,
-            Token::EqEq,
-            Token::BangEq,
-        ]) {
-            Some(Token::EqEq) => BinaryOp::Equal,
-            Some(Token::BangEq) => BinaryOp::NotEqual,
-            Some(Token::Less) => BinaryOp::LessThan,
-            Some(Token::LessEq) => BinaryOp::LessEq,
-            Some(Token::Greater) => BinaryOp::GreaterThan,
-            Some(Token::GreaterEq) => BinaryOp::GreaterEq,
-            Some(_) => unreachable!(),
-            None => return Ok((left, typ_left)),
-        };
+        let operation = matches_many!(self,
+            EqEq(_) => BinaryOp::Equal,
+            BangEq(_) => BinaryOp::NotEqual,
+            Less(_) => BinaryOp::LessThan,
+            LessEq(_) => BinaryOp::LessEq,
+            Greater(_) => BinaryOp::GreaterThan,
+            GreaterEq(_) => BinaryOp::GreaterEq,
+            _ => return Ok((left, typ_left)),
+        );
+
         let (right, typ_right) = self.parse_add_subtract()?;
-        let typ = match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Bool,
-            (typ_left, typ_right) => {
-                panic!("Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}")
-            }
-        };
+        let typ = type_of_binaryop(&typ_left, operation, &typ_right);
         Ok((Expr::binary(left, operation, right), typ))
     }
 
     fn parse_add_subtract(&mut self) -> Res<(Expr, Typ)> {
         let (left, typ_left) = self.parse_mult_div_mod()?;
 
-        if self.matches(Token::Plus)?.is_some() {
-            let (right, typ_right) = self.parse_mult_div_mod()?;
-            let typ = match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) => Typ::Number,
-                (Typ::String, Typ::String) => Typ::String,
-                (typ_left, typ_right) => panic!(
-                    "Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"
-                ),
-            };
-            return Ok((Expr::binary(left, BinaryOp::Add, right), typ));
-        } else if self.matches(Token::Minus)?.is_some() {
-            let (right, typ_right) = self.parse_mult_div_mod()?;
-            let typ = match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) => Typ::Number,
-                (typ_left, typ_right) => panic!(
-                    "Unsupported types for subtraction: left: {typ_left:?}, right: {typ_right:?}"
-                ),
-            };
-            return Ok((Expr::binary(left, BinaryOp::Subtract, right), typ));
-        }
-        Ok((left, typ_left))
+        Ok(match () {
+            () if let Some(_) = self.matches(Token::Plus)? => {
+                let (right, typ_right) = self.parse_mult_div_mod()?;
+                let typ = type_of_binaryop(&typ_left, BinaryOp::Add, &typ_right);
+                (Expr::binary(left, BinaryOp::Add, right), typ)
+            }
+            () if let Some(_) = self.matches(Token::Minus)? => {
+                let (right, typ_right) = self.parse_mult_div_mod()?;
+                let typ = type_of_binaryop(&typ_left, BinaryOp::Subtract, &typ_right);
+                (Expr::binary(left, BinaryOp::Subtract, right), typ)
+            }
+            () => (left, typ_left),
+        })
     }
 
     fn parse_mult_div_mod(&mut self) -> Res<(Expr, Typ)> {
-        let left = self.parse_unary_op()?;
-        let operation = match self.is_one_of([Token::Star, Token::Slash, Token::Percent]) {
-            Some(Token::Star) => BinaryOp::Multiply,
-            Some(Token::Slash) => BinaryOp::Divide,
-            Some(Token::Percent) => BinaryOp::Modulo,
-            Some(_) => unreachable!(),
-            None => return Ok(left),
-        };
-        let right = self.parse_unary_op()?;
-        Ok(Expr::binary(left, operation, right))
+        let (left, typ_left) = self.parse_unary_op()?;
+
+        Ok(match () {
+            () if let Some(_) = self.matches(Token::Star)? => {
+                let (right, typ_right) = self.parse_unary_op()?;
+                let typ = type_of_binaryop(&typ_left, BinaryOp::Multiply, &typ_right);
+                (Expr::binary(left, BinaryOp::Multiply, right), typ)
+            }
+            () if let Some(_) = self.matches(Token::Slash)? => {
+                let (right, typ_right) = self.parse_unary_op()?;
+                let typ = type_of_binaryop(&typ_left, BinaryOp::Divide, &typ_right);
+                (Expr::binary(left, BinaryOp::Divide, right), typ)
+            }
+            () if let Some(_) = self.matches(Token::Percent)? => {
+                let (right, typ_right) = self.parse_unary_op()?;
+                let typ = type_of_binaryop(&typ_left, BinaryOp::Modulo, &typ_right);
+                (Expr::binary(left, BinaryOp::Modulo, right), typ)
+            }
+            () => (left, typ_left),
+        })
     }
 
     fn parse_unary_op(&mut self) -> Res<(Expr, Typ)> {
         if let Some(lexeme) = self.matches(Token::Minus)? {
-            let right = self.parse_func_call()?;
-            return Ok(Expr::unary(UnaryOp::Negate, lexeme.span, right));
+            let (right, typ_right) = self.parse_func_call()?;
+            let typ = type_of_unaryop(UnaryOp::Negate, &typ_right);
+            return Ok((Expr::unary(UnaryOp::Negate, lexeme.span, right), typ));
         } else if let Some(lexeme) = self.matches(Token::Tilde)? {
-            let right = self.parse_func_call()?;
-            return Ok(Expr::unary(UnaryOp::BitNot, lexeme.span, right));
+            let (right, typ_right) = self.parse_func_call()?;
+            let typ = type_of_unaryop(UnaryOp::BitNot, &typ_right);
+            return Ok((Expr::unary(UnaryOp::BitNot, lexeme.span, right), typ));
         } else if let Some(lexeme) = self.matches(Token::Bang)? {
-            let right = self.parse_func_call()?;
-            return Ok(Expr::unary(UnaryOp::BoolNot, lexeme.span, right));
+            let (right, typ_right) = self.parse_func_call()?;
+            let typ = type_of_unaryop(UnaryOp::BoolNot, &typ_right);
+            return Ok((Expr::unary(UnaryOp::BoolNot, lexeme.span, right), typ));
         }
         self.parse_func_call()
     }
@@ -673,20 +584,30 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     fn parse_func_call(&mut self) -> Res<(Expr, Typ)> {
-        let mut func_call = self.parse_basic()?;
+        let (mut func_call, mut func_typ) = self.parse_basic()?;
 
         while self.matches(Token::OpenParen)?.is_some() {
+            let Typ::Function { params, ret } = func_typ else {
+                panic!("not a function object");
+            };
             let (args_list, close) = self.consume_args()?;
+            let mut args = vec![];
+            assert_eq!(params.len(), args_list.len(), "different argument counts");
+            for ((arg, typ), expected_typ) in args_list.into_iter().zip(params) {
+                assert!(&typ.can_coerce(&expected_typ));
+                args.push(arg);
+            }
             func_call = Expr {
                 span: func_call.span + close,
                 kind: ExprKind::Call {
                     callee: Box::new(func_call),
-                    args: args_list,
+                    args,
                 },
             };
+            func_typ = *ret;
         }
 
-        Ok(func_call)
+        Ok((func_call, func_typ))
     }
 
     fn find_var(&self, name: &str) -> Option<(usize, usize)> {
@@ -702,41 +623,67 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         let lexeme = self.next()?.ok_or(ParserError::UnexpectedGotNone)?;
         let expr = match lexeme.t {
             Token::OpenParen => self.parse_paren(lexeme.span)?,
-            Token::StringLit(string) => Expr {
-                span: lexeme.span,
-                kind: ExprKind::Literal(RuntimeVal::String(string)),
-            },
-            Token::NumLit(number) => Expr {
-                span: lexeme.span,
-                kind: ExprKind::Literal(RuntimeVal::Number(number)),
-            },
-            Token::True => Expr {
-                span: lexeme.span,
-                kind: ExprKind::Literal(RuntimeVal::Boolean(true)),
-            },
-            Token::False => Expr {
-                span: lexeme.span,
-                kind: ExprKind::Literal(RuntimeVal::Boolean(false)),
-            },
-            Token::Ident(identifier) => self
-                .find_var(&identifier)
-                .map(|(depth, slot)| Expr {
+            Token::StringLit(string) => (
+                Expr {
                     span: lexeme.span,
-                    kind: ExprKind::VarGet { depth, slot },
-                })
-                .unwrap_or(Expr {
+                    kind: ExprKind::Literal(RuntimeVal::String(string)),
+                },
+                Typ::String,
+            ),
+            Token::NumLit(number) => (
+                Expr {
                     span: lexeme.span,
-                    kind: ExprKind::Ident(identifier),
-                }),
+                    kind: ExprKind::Literal(RuntimeVal::Number(number)),
+                },
+                Typ::Number,
+            ),
+            Token::True => (
+                Expr {
+                    span: lexeme.span,
+                    kind: ExprKind::Literal(RuntimeVal::Boolean(true)),
+                },
+                Typ::Bool,
+            ),
+            Token::False => (
+                Expr {
+                    span: lexeme.span,
+                    kind: ExprKind::Literal(RuntimeVal::Boolean(false)),
+                },
+                Typ::Bool,
+            ),
+            Token::Ident(identifier) => self.find_var(&identifier).map_or_else(
+                || {
+                    let ident_typ = type_of_ident(identifier.as_ref());
+                    (
+                        Expr {
+                            span: lexeme.span,
+                            kind: ExprKind::Ident(identifier),
+                        },
+                        ident_typ,
+                    )
+                },
+                |(depth, slot)| {
+                    (
+                        Expr {
+                            span: lexeme.span,
+                            kind: ExprKind::VarGet { depth, slot },
+                        },
+                        self.env[depth].typs[slot].clone(),
+                    )
+                },
+            ),
             Token::Let => self.parse_decl(lexeme.span)?,
             Token::Fn => self.parse_func_def(lexeme.span)?,
             Token::If => self.parse_if(lexeme.span)?,
             Token::OpenBracket => {
-                let (body, close) = self.parse_block(EnvStackFrame::new())?;
-                Expr {
-                    kind: ExprKind::Block(body),
-                    span: lexeme.span + close,
-                }
+                let (body, close, typ) = self.parse_block(EnvStackFrame::new())?;
+                (
+                    Expr {
+                        kind: ExprKind::Block(body),
+                        span: lexeme.span + close,
+                    },
+                    typ,
+                )
             }
             Token::While => self.parse_while(lexeme.span)?,
             _ => {
@@ -753,31 +700,37 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     // parse_paren assumes that the initial OpenParen token has already
     // been consumed.
     fn parse_paren(&mut self, open: Span) -> Res<(Expr, Typ)> {
-        let inner_expr = self.parse_expr()?;
+        let (inner_expr, inner_typ) = self.parse_expr()?;
         let close = self.consume(Token::CloseParen, "unclosed paren block")?;
-        Ok(Expr {
-            kind: inner_expr.kind,
-            span: open + close.span,
-        })
+        Ok((
+            Expr {
+                kind: inner_expr.kind,
+                span: open + close.span,
+            },
+            inner_typ,
+        ))
     }
 
     fn parse_decl(&mut self, let_span: Span) -> Res<(Expr, Typ)> {
         let name = self.consume_ident("Expected variable name after let")?;
-        let typ = self.parse_typ()?; // rhs
+        let typ_annotation = self.parse_typ()?; // rhs
         self.consume(Token::Eq, "Expected '=' after let")?;
-        let init = self.parse_expr()?; // lhs
+        let (init, init_typ) = self.parse_expr()?; // lhs
 
-        let lhs_type = self.type_of(&init);
+        // let lhs_type = self.type_of(&init);
 
-        if let Some(t) = typ {
-            assert!(lhs_type == t, "TypeError: Expected {lhs_type}, got {t}");
+        if let Some(t) = typ_annotation {
+            assert!(
+                init_typ.can_coerce(&t),
+                "TypeError: Expected {t}, got {init_typ}"
+            );
 
             self.env.last_mut().expect("no global env").insert(name, t);
         } else {
             self.env
                 .last_mut()
                 .expect("no global env")
-                .insert(name, lhs_type);
+                .insert(name, init_typ);
         }
 
         let span = let_span + init.span;
@@ -786,7 +739,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             value: Box::new(init),
         };
         let expr = Expr { span, kind };
-        Ok(expr)
+        Ok((expr, Typ::Null))
     }
 
     fn parse_func_def(&mut self, fn_span: Span) -> Res<(Expr, Typ)> {
@@ -797,29 +750,41 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         let params = self.consume_parameters()?;
         let param_count = params.len();
         let mut frame = EnvStackFrame::new();
-        for param in params {
+        let mut param_types = vec![];
+        for (param, typ) in params {
             frame.insert(param, Typ::Any);
+            param_types.push(typ);
         }
         self.consume(
             Token::OpenBracket,
             "Function definition requires an opening bracket.",
         )?;
-        let (block, close) = self.parse_block(frame)?;
+        let (block, close, body_typ) = self.parse_block(frame)?;
 
-        Ok(Expr {
-            span: fn_span + close,
-            kind: ExprKind::Func {
-                param_count,
-                body: block,
+        Ok((
+            Expr {
+                span: fn_span + close,
+                kind: ExprKind::Func {
+                    param_count,
+                    body: block,
+                },
             },
-        })
+            Typ::Function {
+                params: param_types,
+                ret: Box::new(body_typ),
+            },
+        ))
     }
 
     fn parse_if(&mut self, if_span: Span) -> Res<(Expr, Typ)> {
-        let cond = self.parse_expr()?;
+        let (cond, cond_typ) = self.parse_expr()?;
+        assert!(
+            cond_typ.can_coerce(&Typ::Bool),
+            "conditions must be a boolean"
+        );
         self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
-        let (then, then_end) = self.parse_block(EnvStackFrame::new())?;
+        let (then, then_end, then_typ) = self.parse_block(EnvStackFrame::new())?;
 
         let (otherwise, span) = if self.matches(Token::Otherwise)?.is_some() {
             let (otherwise, span) = match self.next()? {
@@ -827,7 +792,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     t: Token::OpenBracket,
                     span: otherwise_open,
                 }) => {
-                    let (body, close) = self.parse_block(EnvStackFrame::new())?;
+                    let (body, close, otherwise_typ) = self.parse_block(EnvStackFrame::new())?;
+                    assert!(
+                        then_typ.can_coerce(&otherwise_typ),
+                        "then and otherwise must be the same type"
+                    );
                     (
                         (Expr {
                             kind: ExprKind::Block(body),
@@ -840,7 +809,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     t: Token::If,
                     span: if_span,
                 }) => {
-                    let inner = self.parse_if(if_span)?;
+                    let (inner, inner_typ) = self.parse_if(if_span)?;
+                    assert!(
+                        then_typ.can_coerce(&inner_typ),
+                        "then and inner if must be the same type"
+                    );
                     let span = inner.span;
                     ((inner), span)
                 }
@@ -855,41 +828,60 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
             (Some(Box::new(otherwise)), span)
         } else {
+            assert!(
+                &then_typ.can_coerce(&Typ::Null),
+                "if without an otherwise must evaluate to null"
+            );
             (None, if_span + then_end)
         };
 
-        Ok(Expr {
-            kind: ExprKind::If {
-                cond: Box::new(cond),
-                then,
-                otherwise,
+        Ok((
+            Expr {
+                kind: ExprKind::If {
+                    cond: Box::new(cond),
+                    then,
+                    otherwise,
+                },
+                span,
             },
-            span,
-        })
+            then_typ,
+        ))
     }
 
     fn parse_while(&mut self, while_span: Span) -> Res<(Expr, Typ)> {
-        let cond = Box::new(self.parse_expr()?);
+        let (cond, cond_typ) = self.parse_expr()?;
+        assert!(
+            &cond_typ.can_coerce(&Typ::Bool),
+            "conditions must be a boolean"
+        );
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
-        let (body, close) = self.parse_block(EnvStackFrame::new())?;
-        Ok(Expr {
-            kind: ExprKind::While { cond, body },
-            span: while_span + close,
-        })
+        let (body, close, _) = self.parse_block(EnvStackFrame::new())?;
+        Ok((
+            Expr {
+                kind: ExprKind::While {
+                    cond: Box::new(cond),
+                    body,
+                },
+                span: while_span + close,
+            },
+            Typ::Null,
+        ))
     }
 
     // assumes the leading Token::OpenBracket has already been consumed. Returns
     // the list of expressions and the span of the closing bracket
-    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<(Vec<Expr>, Span)> {
+    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<(Vec<Expr>, Span, Typ)> {
         if let Some(close) = self.matches(Token::CloseBracket)? {
-            return Ok((vec![], close.span));
+            return Ok((vec![], close.span, Typ::Null));
         }
 
         // each block creates its own scope, so add a blank scope to the
         // environment stack.
         self.env.push(frame);
 
-        let mut exprs = vec![self.parse_expr()?];
+        let first = self.parse_expr()?;
+        let mut exprs = vec![first.0];
+        let mut typ = first.1;
         while self.matches(Token::Semi)?.is_some() {
             if let Some(close) = self.matches(Token::CloseBracket)? {
                 exprs.push(Expr {
@@ -897,16 +889,18 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     kind: ExprKind::Literal(RuntimeVal::Null),
                 });
                 self.env.pop().expect("misaligned environment stack");
-                return Ok((exprs, close.span));
+                return Ok((exprs, close.span, Typ::Null));
             }
-            exprs.push(self.parse_expr()?);
+            let next = self.parse_expr()?;
+            exprs.push(next.0);
+            typ = next.1;
         }
         let close = self.consume(
             Token::CloseBracket,
             "Expected '}' after block. Check for a missing semicolon on the previous line",
         )?;
         self.env.pop().expect("misaligned environment stack");
-        Ok((exprs, close.span))
+        Ok((exprs, close.span, typ))
     }
 }
 

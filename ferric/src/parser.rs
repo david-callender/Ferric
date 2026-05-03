@@ -505,59 +505,42 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     fn parse_add_subtract(&mut self) -> Res<(Expr, Typ)> {
         let (left, typ_left) = self.parse_mult_div_mod()?;
 
-        Ok(match () {
-            () if let Some(_) = self.matches(Token::Plus)? => {
-                let (right, typ_right) = self.parse_mult_div_mod()?;
-                let typ = type_of_binaryop(&typ_left, BinaryOp::Add, &typ_right);
-                (Expr::binary(left, BinaryOp::Add, right), typ)
-            }
-            () if let Some(_) = self.matches(Token::Minus)? => {
-                let (right, typ_right) = self.parse_mult_div_mod()?;
-                let typ = type_of_binaryop(&typ_left, BinaryOp::Subtract, &typ_right);
-                (Expr::binary(left, BinaryOp::Subtract, right), typ)
-            }
-            () => (left, typ_left),
-        })
+        let operation = matches_many!(self,
+            Plus(_) => BinaryOp::Add,
+            Minus(_) => BinaryOp::Subtract,
+            _ => return Ok((left, typ_left)),
+        );
+
+        let (right, typ_right) = self.parse_mult_div_mod()?;
+        let typ = type_of_binaryop(&typ_left, operation, &typ_right);
+        Ok((Expr::binary(left, operation, right), typ))
     }
 
     fn parse_mult_div_mod(&mut self) -> Res<(Expr, Typ)> {
         let (left, typ_left) = self.parse_unary_op()?;
 
-        Ok(match () {
-            () if let Some(_) = self.matches(Token::Star)? => {
-                let (right, typ_right) = self.parse_unary_op()?;
-                let typ = type_of_binaryop(&typ_left, BinaryOp::Multiply, &typ_right);
-                (Expr::binary(left, BinaryOp::Multiply, right), typ)
-            }
-            () if let Some(_) = self.matches(Token::Slash)? => {
-                let (right, typ_right) = self.parse_unary_op()?;
-                let typ = type_of_binaryop(&typ_left, BinaryOp::Divide, &typ_right);
-                (Expr::binary(left, BinaryOp::Divide, right), typ)
-            }
-            () if let Some(_) = self.matches(Token::Percent)? => {
-                let (right, typ_right) = self.parse_unary_op()?;
-                let typ = type_of_binaryop(&typ_left, BinaryOp::Modulo, &typ_right);
-                (Expr::binary(left, BinaryOp::Modulo, right), typ)
-            }
-            () => (left, typ_left),
-        })
+        let operation = matches_many!(self,
+            Star(_) => BinaryOp::Multiply,
+            Slash(_) => BinaryOp::Divide,
+            Percent(_) => BinaryOp::Modulo,
+            _ => return Ok((left, typ_left))
+        );
+        let (right, typ_right) = self.parse_unary_op()?;
+        let typ = type_of_binaryop(&typ_left, operation, &typ_right);
+        Ok((Expr::binary(left, operation, right), typ))
     }
 
     fn parse_unary_op(&mut self) -> Res<(Expr, Typ)> {
-        if let Some(lexeme) = self.matches(Token::Minus)? {
-            let (right, typ_right) = self.parse_func_call()?;
-            let typ = type_of_unaryop(UnaryOp::Negate, &typ_right);
-            return Ok((Expr::unary(UnaryOp::Negate, lexeme.span, right), typ));
-        } else if let Some(lexeme) = self.matches(Token::Tilde)? {
-            let (right, typ_right) = self.parse_func_call()?;
-            let typ = type_of_unaryop(UnaryOp::BitNot, &typ_right);
-            return Ok((Expr::unary(UnaryOp::BitNot, lexeme.span, right), typ));
-        } else if let Some(lexeme) = self.matches(Token::Bang)? {
-            let (right, typ_right) = self.parse_func_call()?;
-            let typ = type_of_unaryop(UnaryOp::BoolNot, &typ_right);
-            return Ok((Expr::unary(UnaryOp::BoolNot, lexeme.span, right), typ));
-        }
-        self.parse_func_call()
+        let (operation, lexeme) = matches_many!(self,
+            Minus(l) => (UnaryOp::Negate, l),
+            Tilde(l) => (UnaryOp::BitNot, l),
+            Bang(l) => (UnaryOp::BoolNot, l),
+            _ => return self.parse_func_call()
+        );
+
+        let (right, typ_right) = self.parse_func_call()?;
+        let typ = type_of_unaryop(operation, &typ_right);
+        Ok((Expr::unary(operation, lexeme.span, right), typ))
     }
 
     // consume_args also consumes the closing paren of the
@@ -572,14 +555,11 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             while self.matches(Token::Comma)?.is_some() {
                 args_vec.push(self.parse_expr()?);
             }
-            (
-                args_vec,
-                self.consume(
-                    Token::CloseParen,
-                    "Unclosed function call parentheses or missing comma",
-                )?
-                .span,
-            )
+            let close = self.consume(
+                Token::CloseParen,
+                "Unclosed function call parentheses or missing comma",
+            )?;
+            (args_vec, close.span)
         })
     }
 
@@ -717,21 +697,19 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         self.consume(Token::Eq, "Expected '=' after let")?;
         let (init, init_typ) = self.parse_expr()?; // lhs
 
-        // let lhs_type = self.type_of(&init);
-
-        if let Some(t) = typ_annotation {
+        let var_typ = if let Some(t) = typ_annotation {
             assert!(
                 init_typ.can_coerce(&t),
                 "TypeError: Expected {t}, got {init_typ}"
             );
-
-            self.env.last_mut().expect("no global env").insert(name, t);
+            t
         } else {
-            self.env
-                .last_mut()
-                .expect("no global env")
-                .insert(name, init_typ);
-        }
+            init_typ
+        };
+        self.env
+            .last_mut()
+            .expect("no global env")
+            .insert(name, var_typ);
 
         let span = let_span + init.span;
 
@@ -917,61 +895,61 @@ mod tests {
     #[test]
     fn num_literal() {
         let mut parser = Parser::test(tokens!(NumLit(4.0)));
-        assert_eq!(parser.parse_expr().unwrap(), expr!(NumLit(4.0)));
+        assert_eq!(parser.parse_expr().unwrap().0, expr!(NumLit(4.0)));
     }
 
     #[test]
     fn string_literal() {
         let mut parser = Parser::test(tokens!(StrLit("dingus")));
-        assert_eq!(parser.parse_expr().unwrap(), expr!(StrLit("dingus")));
+        assert_eq!(parser.parse_expr().unwrap().0, expr!(StrLit("dingus")));
     }
 
     #[test]
     fn parentheses() {
         let mut parser = Parser::test(tokens!(OpenParen, NumLit(4.0), CloseParen));
-        assert_eq!(parser.parse_expr().unwrap(), expr!(NumLit(4.0)));
+        assert_eq!(parser.parse_expr().unwrap().0, expr!(NumLit(4.0)));
     }
 
     #[test]
     fn add() {
         let mut parser = Parser::test(tokens!(NumLit(4.0), Plus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Add, NumLit(5.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn subtract() {
         let mut parser = Parser::test(tokens!(NumLit(4.0), Minus, NumLit(5.0)));
         let target = expr!(Binary(NumLit(4.0), Subtract, NumLit(5.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn multiply() {
         let mut parser = Parser::test(tokens!(NumLit(20.0), Star, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Multiply, NumLit(22.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn divide() {
         let mut parser = Parser::test(tokens!(NumLit(20.0), Slash, NumLit(22.0)));
         let target = expr!(Binary(NumLit(20.0), Divide, NumLit(22.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn modulo() {
         let mut parser = Parser::test(tokens!(NumLit(10.0), Percent, NumLit(2.0)));
         let target = expr!(Binary(NumLit(10.0), Modulo, NumLit(2.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn simple_funcall() {
         let mut parser = Parser::test(tokens!(Ident("my_func"), OpenParen, CloseParen));
         let target = expr!(Call(Ident("my_func"), []));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
@@ -991,28 +969,28 @@ mod tests {
             Call(Ident("my_func"), [NumLit(42.0), NumLit(88.0)]),
             [StrLit("dingus")]
         ));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn unary_minus() {
         let mut parser = Parser::test(tokens!(Minus, NumLit(6.0)));
         let target = expr!(Unary(Negate, NumLit(6.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn unary_bitnot() {
         let mut parser = Parser::test(tokens!(Tilde, NumLit(6.0)));
         let target = expr!(Unary(BitNot, NumLit(6.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn unary_and_minus() {
         let mut parser = Parser::test(tokens!(Minus, NumLit(6.0), Minus, NumLit(6.0)));
         let target = expr!(Binary(Unary(Negate, NumLit(6.0)), Subtract, NumLit(6.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
@@ -1026,7 +1004,7 @@ mod tests {
             CloseParen
         ));
         let target = expr!(Unary(Negate, Binary(NumLit(6.0), Add, NumLit(6.0))));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
@@ -1034,12 +1012,12 @@ mod tests {
         // empty
         let mut parser = Parser::test(tokens!(OpenBracket, CloseBracket, Semi));
         let target = expr!(Block {});
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         // one, return last
         let mut parser = Parser::test(tokens!(OpenBracket, NumLit(4.0), CloseBracket, Semi));
         let target = expr!(Block { NumLit(4.0) });
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         // one, don't return last
         let mut parser = Parser::test(tokens!(OpenBracket, NumLit(4.0), Semi, CloseBracket, Semi));
@@ -1047,7 +1025,7 @@ mod tests {
             NumLit(4.0),
             Null()
         });
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         // many, return last
         let mut parser = Parser::test(tokens!(
@@ -1062,7 +1040,7 @@ mod tests {
             NumLit(4.0),
             NumLit(5.0)
         });
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         // many, don't return last
         let mut parser = Parser::test(tokens!(
@@ -1079,7 +1057,7 @@ mod tests {
             NumLit(5.0),
             Null()
         });
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
@@ -1100,7 +1078,7 @@ mod tests {
             None
         });
 
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         // if otherwise
         let mut parser = Parser::test(tokens!(
@@ -1122,7 +1100,7 @@ mod tests {
             Block { NumLit(5.0) }
         });
 
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         // if otherwise-if otherwise
         let mut parser = Parser::test(tokens!(
@@ -1154,22 +1132,22 @@ mod tests {
             }
         });
 
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
     fn comparisons() {
         let mut parser = Parser::test(tokens!(NumLit(3.0), EqEq, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), Equal, NumLit(4.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         let mut parser = Parser::test(tokens!(NumLit(3.0), Greater, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), GreaterThan, NumLit(4.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
 
         let mut parser = Parser::test(tokens!(NumLit(3.0), LessEq, NumLit(4.0)));
         let target = expr!(Binary(NumLit(3.0), LessEq, NumLit(4.0)));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
@@ -1188,7 +1166,7 @@ mod tests {
             Equal,
             Binary(NumLit(9.0), Subtract, NumLit(3.0))
         ));
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     #[test]
@@ -1209,7 +1187,7 @@ mod tests {
             }
         });
 
-        assert_eq!(parser.parse_expr().unwrap(), target);
+        assert_eq!(parser.parse_expr().unwrap().0, target);
     }
 
     // #[test]

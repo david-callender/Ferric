@@ -1,4 +1,10 @@
-use std::{collections::{HashMap, HashSet}, iter::Peekable, rc::Rc, string::FromUtf8Error, vec};
+use std::{
+    collections::{HashMap, HashSet},
+    iter::Peekable,
+    rc::Rc,
+    string::FromUtf8Error,
+    vec,
+};
 
 use thiserror::Error;
 
@@ -37,6 +43,7 @@ pub enum Token {
     If,           // if
     Otherwise,    // otherwise
     While,        // while
+    For,          // for
     Fn,           // fn
     OpenParen,    // (
     CloseParen,   // )
@@ -92,6 +99,7 @@ impl std::fmt::Display for Token {
             Token::If => write!(f, "if"),
             Token::Otherwise => write!(f, "otherwise"),
             Token::While => write!(f, "while"),
+            Token::For => write!(f, "for"),
             Token::Fn => write!(f, "fn"),
             Token::OpenParen => write!(f, "("),
             Token::CloseParen => write!(f, ")"),
@@ -130,7 +138,6 @@ impl std::fmt::Display for Token {
     }
 }
 
-
 pub struct Lexer<I: Iterator<Item = u8>> {
     stream: Peekable<I>,
     keywords: HashMap<&'static str, Token>,
@@ -149,6 +156,7 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
             ("if", Token::If),
             ("otherwise", Token::Otherwise),
             ("while", Token::While),
+            ("for", Token::For),
             ("fn", Token::Fn),
             ("and", Token::LAnd),
             ("or", Token::LOr),
@@ -346,7 +354,10 @@ impl<I: Iterator<Item = u8>> Lexer<I> {
                 let span = Span::new(start, end);
                 let st = String::from_utf8(st)
                     .map_err(|err| LexerError::StrLitInvalidUtf8(self.src.clone(), span, err))?;
-                return Ok(Lexeme::new(Token::StringLit(self.process_str_buf(st)), span));
+                return Ok(Lexeme::new(
+                    Token::StringLit(self.process_str_buf(st)),
+                    span,
+                ));
             }
             if s == b'\\' {
                 // should be made into its own error

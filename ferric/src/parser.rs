@@ -180,7 +180,7 @@ impl std::fmt::Display for UnaryOp {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Typ {
     Any,
     Number,
@@ -199,17 +199,15 @@ impl Typ {
     }
 }
 
-impl Eq for Typ {}
-
 impl Display for Typ {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Typ::String => write!(f, "String"),
-            Typ::Number => write!(f, "Number"),
-            Typ::Any => write!(f, "Any"),
-            Typ::Null => write!(f, "Null"),
-            Typ::Function { params: _, ret: _ } => write!(f, "Function"),
-            Typ::Bool => write!(f, "Unknown"),
+            Typ::String => write!(f, "string"),
+            Typ::Number => write!(f, "number"),
+            Typ::Any => write!(f, "any"),
+            Typ::Null => write!(f, "null"),
+            Typ::Function { params: _, ret: _ } => write!(f, "fn"),
+            Typ::Bool => write!(f, "bool"),
         }
     }
 }
@@ -231,91 +229,15 @@ impl EnvStackFrame {
     pub fn new() -> Self {
         EnvStackFrame::default()
     }
+
     pub fn insert(&mut self, name: Rc<str>, typ: Typ) {
         self.frame.insert(name, self.next_index);
         self.typs.push(typ);
         self.next_index += 1;
     }
+
     pub fn get(&self, key: &str) -> Option<usize> {
         Some(*self.frame.get(key)?)
-    }
-}
-
-fn type_of_unaryop(kind: UnaryOp, typ_right: &Typ) -> Typ {
-    match (kind, typ_right) {
-        (_, Typ::Any) => Typ::Any,
-        (UnaryOp::Negate | UnaryOp::BitNot, Typ::Number) => Typ::Number,
-        (UnaryOp::BoolNot, Typ::Bool) => Typ::Bool,
-        (UnaryOp::Negate, _) => panic!("Unsupported type for numeric negation: {typ_right:?}"),
-        (UnaryOp::BitNot, _) => panic!("Unsupported type for bitwise not: {typ_right:?}"),
-        (UnaryOp::BoolNot, _) => panic!("Unsupported type for boolean negation: {typ_right:?}"),
-    }
-}
-
-fn type_of_binaryop(typ_left: &Typ, kind: BinaryOp, typ_right: &Typ) -> Typ {
-    if *typ_left == Typ::Any || *typ_right == Typ::Any {
-        return Typ::Any;
-    }
-    match kind {
-        BinaryOp::Add => match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) => Typ::Number,
-            (Typ::String, Typ::String) => Typ::String,
-            _ => panic!("Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"),
-        },
-        BinaryOp::Subtract => match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) => Typ::Number,
-            _ => panic!(
-                "Unsupported types for subtraction: left: {typ_left:?}, right: {typ_right:?}"
-            ),
-        },
-        BinaryOp::Multiply => match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) => Typ::Number,
-            (Typ::String, Typ::Number) => Typ::String,
-            _ => panic!(
-                "Unsupported types for multiplication: left {typ_left:?}, right: {typ_right:?}"
-            ),
-        },
-        BinaryOp::Divide => match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) => Typ::Number,
-            _ => panic!("Unsupported types for division: left: {typ_left:?}, right: {typ_right:?}"),
-        },
-        BinaryOp::Modulo => match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) => Typ::Number,
-            _ => panic!("Unsupported types for modulo: left {typ_left:?}, right: {typ_right:?}"),
-        },
-        BinaryOp::Equal
-        | BinaryOp::NotEqual
-        | BinaryOp::GreaterThan
-        | BinaryOp::LessThan
-        | BinaryOp::GreaterEq
-        | BinaryOp::LessEq => match (typ_left, typ_right) {
-            (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Bool,
-            _ => {
-                panic!("Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}")
-            }
-        },
-    }
-}
-
-fn type_of_ident(string: &str) -> Typ {
-    match string {
-        "print" => Typ::Function {
-            params: vec![Typ::Any],
-            ret: Box::new(Typ::Null),
-        },
-        "substr" => Typ::Function {
-            params: vec![Typ::String, Typ::Number, Typ::Number],
-            ret: Box::new(Typ::String),
-        },
-        "len" => Typ::Function {
-            params: vec![Typ::String],
-            ret: Box::new(Typ::Number),
-        },
-        "clock" | "unix_time" => Typ::Function {
-            params: vec![],
-            ret: Box::new(Typ::Number),
-        },
-        _ => panic!("Got ident which does not resolve to function: {string}"),
     }
 }
 
@@ -415,6 +337,112 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         Ok(parameters)
     }
 
+    // consume_args also consumes the closing paren of the
+    // arguments list, but assumes that the opening paren has
+    // already been parsed. Also returns the closing param's span
+    fn consume_args(&mut self) -> Res<(Vec<(Expr, Typ)>, Span)> {
+        Ok(if let Some(close) = self.matches(Token::CloseParen)? {
+            (vec![], close.span)
+        } else {
+            let mut args_vec = vec![];
+            args_vec.push(self.parse_expr()?);
+            while self.matches(Token::Comma)?.is_some() {
+                args_vec.push(self.parse_expr()?);
+            }
+            let close = self.consume(
+                Token::CloseParen,
+                "Unclosed function call parentheses or missing comma",
+            )?;
+            (args_vec, close.span)
+        })
+    }
+
+    fn type_of_unaryop(&self, kind: UnaryOp, typ_right: &Typ) -> Typ {
+        match (kind, typ_right) {
+            (_, Typ::Any) => Typ::Any,
+            (UnaryOp::Negate | UnaryOp::BitNot, Typ::Number) => Typ::Number,
+            (UnaryOp::BoolNot, Typ::Bool) => Typ::Bool,
+            (UnaryOp::Negate, _) => panic!("Unsupported type for numeric negation: {typ_right:?}"),
+            (UnaryOp::BitNot, _) => panic!("Unsupported type for bitwise not: {typ_right:?}"),
+            (UnaryOp::BoolNot, _) => panic!("Unsupported type for boolean negation: {typ_right:?}"),
+        }
+    }
+
+    fn type_of_binaryop(&self, typ_left: &Typ, kind: BinaryOp, typ_right: &Typ) -> Typ {
+        if *typ_left == Typ::Any || *typ_right == Typ::Any {
+            return Typ::Any;
+        }
+        match kind {
+            BinaryOp::Add => match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) => Typ::Number,
+                (Typ::String, Typ::String) => Typ::String,
+                _ => panic!(
+                    "Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"
+                ),
+            },
+            BinaryOp::Subtract => match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) => Typ::Number,
+                _ => panic!(
+                    "Unsupported types for subtraction: left: {typ_left:?}, right: {typ_right:?}"
+                ),
+            },
+            BinaryOp::Multiply => match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) => Typ::Number,
+                (Typ::String, Typ::Number) => Typ::String,
+                _ => panic!(
+                    "Unsupported types for multiplication: left {typ_left:?}, right: {typ_right:?}"
+                ),
+            },
+            BinaryOp::Divide => match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) => Typ::Number,
+                _ => panic!(
+                    "Unsupported types for division: left: {typ_left:?}, right: {typ_right:?}"
+                ),
+            },
+            BinaryOp::Modulo => match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) => Typ::Number,
+                _ => {
+                    panic!("Unsupported types for modulo: left {typ_left:?}, right: {typ_right:?}")
+                }
+            },
+            BinaryOp::Equal
+            | BinaryOp::NotEqual
+            | BinaryOp::GreaterThan
+            | BinaryOp::LessThan
+            | BinaryOp::GreaterEq
+            | BinaryOp::LessEq => match (typ_left, typ_right) {
+                (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Bool,
+                _ => {
+                    panic!(
+                        "Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}"
+                    )
+                }
+            },
+        }
+    }
+
+    fn type_of_ident(&self, string: &str) -> Typ {
+        match string {
+            "print" => Typ::Function {
+                params: vec![Typ::Any],
+                ret: Box::new(Typ::Null),
+            },
+            "substr" => Typ::Function {
+                params: vec![Typ::String, Typ::Number, Typ::Number],
+                ret: Box::new(Typ::String),
+            },
+            "len" => Typ::Function {
+                params: vec![Typ::String],
+                ret: Box::new(Typ::Number),
+            },
+            "clock" | "unix_time" => Typ::Function {
+                params: vec![],
+                ret: Box::new(Typ::Number),
+            },
+            _ => Typ::Any,
+        }
+    }
+
     pub fn parse(&mut self) -> Res<Vec<Expr>> {
         let mut exprs = vec![];
         while self.stream.peek().is_some() {
@@ -440,6 +468,41 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         } else {
             Ok(None)
         }
+    }
+
+    // assumes the leading Token::OpenBracket has already been consumed. Returns
+    // the list of expressions and the span of the closing bracket
+    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<(Vec<Expr>, Span, Typ)> {
+        if let Some(close) = self.matches(Token::CloseBracket)? {
+            return Ok((vec![], close.span, Typ::Null));
+        }
+
+        // each block creates its own scope, so add a blank scope to the
+        // environment stack.
+        self.env.push(frame);
+
+        let first = self.parse_expr()?;
+        let mut exprs = vec![first.0];
+        let mut typ = first.1;
+        while self.matches(Token::Semi)?.is_some() {
+            if let Some(close) = self.matches(Token::CloseBracket)? {
+                exprs.push(Expr {
+                    span: close.span,
+                    kind: ExprKind::Literal(RuntimeVal::Null),
+                });
+                self.env.pop().expect("misaligned environment stack");
+                return Ok((exprs, close.span, Typ::Null));
+            }
+            let next = self.parse_expr()?;
+            exprs.push(next.0);
+            typ = next.1;
+        }
+        let close = self.consume(
+            Token::CloseBracket,
+            "Expected '}' after block. Check for a missing semicolon on the previous line",
+        )?;
+        self.env.pop().expect("misaligned environment stack");
+        Ok((exprs, close.span, typ))
     }
 
     fn parse_expr(&mut self) -> Res<(Expr, Typ)> {
@@ -498,7 +561,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         );
 
         let (right, typ_right) = self.parse_add_subtract()?;
-        let typ = type_of_binaryop(&typ_left, operation, &typ_right);
+        let typ = self.type_of_binaryop(&typ_left, operation, &typ_right);
         Ok((Expr::binary(left, operation, right), typ))
     }
 
@@ -512,7 +575,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         );
 
         let (right, typ_right) = self.parse_mult_div_mod()?;
-        let typ = type_of_binaryop(&typ_left, operation, &typ_right);
+        let typ = self.type_of_binaryop(&typ_left, operation, &typ_right);
         Ok((Expr::binary(left, operation, right), typ))
     }
 
@@ -526,7 +589,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             _ => return Ok((left, typ_left))
         );
         let (right, typ_right) = self.parse_unary_op()?;
-        let typ = type_of_binaryop(&typ_left, operation, &typ_right);
+        let typ = self.type_of_binaryop(&typ_left, operation, &typ_right);
         Ok((Expr::binary(left, operation, right), typ))
     }
 
@@ -539,28 +602,8 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         );
 
         let (right, typ_right) = self.parse_func_call()?;
-        let typ = type_of_unaryop(operation, &typ_right);
+        let typ = self.type_of_unaryop(operation, &typ_right);
         Ok((Expr::unary(operation, lexeme.span, right), typ))
-    }
-
-    // consume_args also consumes the closing paren of the
-    // arguments list, but assumes that the opening paren has
-    // already been parsed. Also returns the closing param's span
-    fn consume_args(&mut self) -> Res<(Vec<(Expr, Typ)>, Span)> {
-        Ok(if let Some(close) = self.matches(Token::CloseParen)? {
-            (vec![], close.span)
-        } else {
-            let mut args_vec = vec![];
-            args_vec.push(self.parse_expr()?);
-            while self.matches(Token::Comma)?.is_some() {
-                args_vec.push(self.parse_expr()?);
-            }
-            let close = self.consume(
-                Token::CloseParen,
-                "Unclosed function call parentheses or missing comma",
-            )?;
-            (args_vec, close.span)
-        })
     }
 
     fn parse_func_call(&mut self) -> Res<(Expr, Typ)> {
@@ -600,77 +643,29 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     fn parse_basic(&mut self) -> Res<(Expr, Typ)> {
-        let lexeme = self.next()?.ok_or(ParserError::UnexpectedGotNone)?;
-        let expr = match lexeme.t {
-            Token::OpenParen => self.parse_paren(lexeme.span)?,
-            Token::StringLit(string) => (
-                Expr {
-                    span: lexeme.span,
-                    kind: ExprKind::Literal(RuntimeVal::String(string)),
-                },
-                Typ::String,
-            ),
-            Token::NumLit(number) => (
-                Expr {
-                    span: lexeme.span,
-                    kind: ExprKind::Literal(RuntimeVal::Number(number)),
-                },
-                Typ::Number,
-            ),
-            Token::True => (
-                Expr {
-                    span: lexeme.span,
-                    kind: ExprKind::Literal(RuntimeVal::Boolean(true)),
-                },
-                Typ::Bool,
-            ),
-            Token::False => (
-                Expr {
-                    span: lexeme.span,
-                    kind: ExprKind::Literal(RuntimeVal::Boolean(false)),
-                },
-                Typ::Bool,
-            ),
-            Token::Ident(identifier) => self.find_var(&identifier).map_or_else(
-                || {
-                    let ident_typ = type_of_ident(identifier.as_ref());
-                    (
-                        Expr {
-                            span: lexeme.span,
-                            kind: ExprKind::Ident(identifier),
-                        },
-                        ident_typ,
-                    )
-                },
-                |(depth, slot)| {
-                    (
-                        Expr {
-                            span: lexeme.span,
-                            kind: ExprKind::VarGet { depth, slot },
-                        },
-                        self.env[self.env.len() - depth - 1].typs[slot].clone(),
-                    )
-                },
-            ),
-            Token::Let => self.parse_decl(lexeme.span)?,
-            Token::Fn => self.parse_func_def(lexeme.span)?,
-            Token::If => self.parse_if(lexeme.span)?,
-            Token::OpenBracket => {
-                let (body, close, typ) = self.parse_block(EnvStackFrame::new())?;
-                (
-                    Expr {
-                        kind: ExprKind::Block(body),
-                        span: lexeme.span + close,
-                    },
-                    typ,
-                )
-            }
-            Token::While => self.parse_while(lexeme.span)?,
-            Token::For => self.parse_for(lexeme.span)?,
-            _ => {
+        let literal = |val: RuntimeVal, span: Span, typ: Typ| {
+            let kind = ExprKind::Literal(val);
+            let expr = Expr { span, kind };
+            (expr, typ)
+        };
+        let Lexeme { t: token, span } = self.next()?.ok_or(ParserError::UnexpectedGotNone)?;
+        let expr = match token {
+            Token::OpenParen => self.parse_paren(span)?,
+            Token::StringLit(string) => literal(RuntimeVal::String(string), span, Typ::String),
+            Token::NumLit(number) => literal(RuntimeVal::Number(number), span, Typ::Number),
+            Token::True => literal(RuntimeVal::Boolean(true), span, Typ::Bool),
+            Token::False => literal(RuntimeVal::Boolean(false), span, Typ::Bool),
+            Token::Ident(identifier) => self.parse_ident(identifier, span),
+            Token::Let => self.parse_decl(span)?,
+            Token::Fn => self.parse_func_def(span)?,
+            Token::If => self.parse_if(span)?,
+            Token::OpenBracket => self.parse_naked_block(span)?,
+            Token::While => self.parse_while(span)?,
+            Token::For => self.parse_for(span)?,
+            t => {
                 return Err(ParserError::Unexpected {
                     src: self.src.clone(),
-                    actual: lexeme,
+                    actual: Lexeme { t, span },
                 });
             }
         };
@@ -690,6 +685,17 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             },
             inner_typ,
         ))
+    }
+
+    fn parse_ident(&self, identifier: Rc<str>, span: Span) -> (Expr, Typ) {
+        let (kind, typ) = if let Some((depth, slot)) = self.find_var(&identifier) {
+            let ident_typ = self.env[self.env.len() - depth - 1].typs[slot].clone();
+            (ExprKind::VarGet { depth, slot }, ident_typ)
+        } else {
+            let ident_typ = self.type_of_ident(identifier.as_ref());
+            (ExprKind::Ident(identifier), ident_typ)
+        };
+        (Expr { span, kind }, typ)
     }
 
     fn parse_decl(&mut self, let_span: Span) -> Res<(Expr, Typ)> {
@@ -827,6 +833,13 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         ))
     }
 
+    fn parse_naked_block(&mut self, open: Span) -> Res<(Expr, Typ)> {
+        let (body, close, typ) = self.parse_block(EnvStackFrame::new())?;
+        let kind = ExprKind::Block(body);
+        let span = open + close;
+        Ok((Expr { span, kind }, typ))
+    }
+
     fn parse_while(&mut self, while_span: Span) -> Res<(Expr, Typ)> {
         let (cond, cond_typ) = self.parse_expr()?;
         assert!(
@@ -885,41 +898,6 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             },
             Typ::Null,
         ))
-    }
-
-    // assumes the leading Token::OpenBracket has already been consumed. Returns
-    // the list of expressions and the span of the closing bracket
-    fn parse_block(&mut self, frame: EnvStackFrame) -> Res<(Vec<Expr>, Span, Typ)> {
-        if let Some(close) = self.matches(Token::CloseBracket)? {
-            return Ok((vec![], close.span, Typ::Null));
-        }
-
-        // each block creates its own scope, so add a blank scope to the
-        // environment stack.
-        self.env.push(frame);
-
-        let first = self.parse_expr()?;
-        let mut exprs = vec![first.0];
-        let mut typ = first.1;
-        while self.matches(Token::Semi)?.is_some() {
-            if let Some(close) = self.matches(Token::CloseBracket)? {
-                exprs.push(Expr {
-                    span: close.span,
-                    kind: ExprKind::Literal(RuntimeVal::Null),
-                });
-                self.env.pop().expect("misaligned environment stack");
-                return Ok((exprs, close.span, Typ::Null));
-            }
-            let next = self.parse_expr()?;
-            exprs.push(next.0);
-            typ = next.1;
-        }
-        let close = self.consume(
-            Token::CloseBracket,
-            "Expected '}' after block. Check for a missing semicolon on the previous line",
-        )?;
-        self.env.pop().expect("misaligned environment stack");
-        Ok((exprs, close.span, typ))
     }
 }
 

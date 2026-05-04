@@ -51,6 +51,48 @@ pub enum ParserError {
 
     #[error("Invalid otherwise expression\nExpected '{{' or 'if' after 'otherwise' but found EOF")]
     InvalidOtherwiseGotNothing,
+
+    #[error("Function parameters must have type annotations\n{}", .span.format(src, "this parameter must have a type annotation"))]
+    MissingTypeAnnotation { src: ProgramSrc, span: Span },
+
+    #[error("Binary type mismatch between {left} and {right}\n{}", .span.format(src, &format!("cannot {op} {left} and {right}")))]
+    BinaryTypeMismatch {
+        src: ProgramSrc,
+        span: Span,
+        op: BinaryOp,
+        left: Typ,
+        right: Typ,
+    },
+
+    #[error("Unary type mismatch with {right}\n{}", .span.format(src, &format!("cannot {op} {right}")))]
+    UnaryTypeMismatch {
+        src: ProgramSrc,
+        span: Span,
+        op: UnaryOp,
+        right: Typ,
+    },
+
+    #[error("Unknown variable\n{}", .span.format(src, "this variable has not been declared and is not a built-in function"))]
+    UnknownVariable {
+        src: ProgramSrc,
+        span: Span,
+        name: Rc<str>,
+    },
+
+    #[error("Expected type\n{}", .actual.span.format(src, &format!("expected a type but found {}", actual.t)))]
+    ExpectedType { src: ProgramSrc, actual: Lexeme },
+
+    #[error("Expected type\n{}", .colon.format(src, "expected a type after this colon, but found EOF"))]
+    ExpectedTypeGotNone { src: ProgramSrc, colon: Span },
+
+    #[error("Type mismatch: {message}\n{}", .span.format(src, &format!("expected this expression to have type {expected}, but it has type {actual}")))]
+    TypeMismatch {
+        src: ProgramSrc,
+        span: Span,
+        expected: Typ,
+        actual: Typ,
+        message: &'static str,
+    },
 }
 
 // Module error type
@@ -297,12 +339,12 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
-    fn consume_ident(&mut self, message: &'static str) -> Res<Rc<str>> {
+    fn consume_ident(&mut self, message: &'static str) -> Res<(Rc<str>, Span)> {
         match self.next()? {
             Some(Lexeme {
                 t: Token::Ident(name),
-                span: _,
-            }) => Ok(name),
+                span,
+            }) => Ok((name, span)),
             Some(actual) => Err(ParserError::ExpectedIdent {
                 src: self.src.clone(),
                 actual,
@@ -312,22 +354,25 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         }
     }
 
+    fn consume_parameter(&mut self) -> Res<(Rc<str>, Typ)> {
+        let (param, span) = self.consume_ident("Function parameters may only be idents")?;
+        let typ = self
+            .parse_typ()?
+            .ok_or(ParserError::MissingTypeAnnotation {
+                src: self.src.clone(),
+                span,
+            })?;
+        Ok((param, typ))
+    }
+
     // consume_parameters assumes that the initial opening paren has
     // already been parsed.
     fn consume_parameters(&mut self) -> Res<Vec<(Rc<str>, Typ)>> {
         let mut parameters = Vec::new();
         if self.matches(Token::CloseParen)?.is_none() {
-            parameters.push((
-                self.consume_ident("Function parameters may only be idents")?,
-                self.parse_typ()?
-                    .expect("function declarations require types"),
-            ));
+            parameters.push(self.consume_parameter()?);
             while self.matches(Token::Comma)?.is_some() {
-                parameters.push((
-                    self.consume_ident("Function parameters may only be idents")?,
-                    self.parse_typ()?
-                        .expect("function declarations require types"),
-                ));
+                parameters.push(self.consume_parameter()?);
             }
             self.consume(
                 Token::CloseParen,
@@ -357,72 +402,66 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         })
     }
 
-    fn type_of_unaryop(&self, kind: UnaryOp, typ_right: &Typ) -> Typ {
-        match (kind, typ_right) {
-            (_, Typ::Any) => Typ::Any,
-            (UnaryOp::Negate | UnaryOp::BitNot, Typ::Number) => Typ::Number,
-            (UnaryOp::BoolNot, Typ::Bool) => Typ::Bool,
-            (UnaryOp::Negate, _) => panic!("Unsupported type for numeric negation: {typ_right:?}"),
-            (UnaryOp::BitNot, _) => panic!("Unsupported type for bitwise not: {typ_right:?}"),
-            (UnaryOp::BoolNot, _) => panic!("Unsupported type for boolean negation: {typ_right:?}"),
+    fn type_of_unaryop(&self, op: UnaryOp, right: Typ, span: Span) -> Res<Typ> {
+        match (op, right) {
+            (_, Typ::Any) => Ok(Typ::Any),
+            (UnaryOp::Negate | UnaryOp::BitNot, Typ::Number) => Ok(Typ::Number),
+            (UnaryOp::BoolNot, Typ::Bool) => Ok(Typ::Bool),
+            (op, right) => Err(ParserError::UnaryTypeMismatch {
+                src: self.src.clone(),
+                span,
+                op,
+                right,
+            }),
         }
     }
 
-    fn type_of_binaryop(&self, typ_left: &Typ, kind: BinaryOp, typ_right: &Typ) -> Typ {
-        if *typ_left == Typ::Any || *typ_right == Typ::Any {
-            return Typ::Any;
-        }
-        match kind {
-            BinaryOp::Add => match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) => Typ::Number,
-                (Typ::String, Typ::String) => Typ::String,
-                _ => panic!(
-                    "Unsupported types for addition: left: {typ_left:?}, right: {typ_right:?}"
-                ),
-            },
-            BinaryOp::Subtract => match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) => Typ::Number,
-                _ => panic!(
-                    "Unsupported types for subtraction: left: {typ_left:?}, right: {typ_right:?}"
-                ),
-            },
-            BinaryOp::Multiply => match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) => Typ::Number,
-                (Typ::String, Typ::Number) => Typ::String,
-                _ => panic!(
-                    "Unsupported types for multiplication: left {typ_left:?}, right: {typ_right:?}"
-                ),
-            },
-            BinaryOp::Divide => match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) => Typ::Number,
-                _ => panic!(
-                    "Unsupported types for division: left: {typ_left:?}, right: {typ_right:?}"
-                ),
-            },
-            BinaryOp::Modulo => match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) => Typ::Number,
-                _ => {
-                    panic!("Unsupported types for modulo: left {typ_left:?}, right: {typ_right:?}")
-                }
-            },
-            BinaryOp::Equal
-            | BinaryOp::NotEqual
-            | BinaryOp::GreaterThan
-            | BinaryOp::LessThan
-            | BinaryOp::GreaterEq
-            | BinaryOp::LessEq => match (typ_left, typ_right) {
-                (Typ::Number, Typ::Number) | (Typ::String, Typ::String) => Typ::Bool,
-                _ => {
-                    panic!(
-                        "Unsupported types for comparison: left: {typ_left:?}, right: {typ_right:?}"
-                    )
-                }
-            },
+    fn type_of_binaryop(&self, left: Typ, op: BinaryOp, right: Typ, span: Span) -> Res<Typ> {
+        match (op, left, right) {
+            (_, Typ::Any, _) | (_, _, Typ::Any) => Ok(Typ::Any),
+            (
+                BinaryOp::Add
+                | BinaryOp::Subtract
+                | BinaryOp::Multiply
+                | BinaryOp::Divide
+                | BinaryOp::Modulo,
+                Typ::Number,
+                Typ::Number,
+            ) => Ok(Typ::Number),
+            (BinaryOp::Add, Typ::String, Typ::String)
+            | (BinaryOp::Multiply, Typ::String, Typ::Number) => Ok(Typ::String),
+            (
+                BinaryOp::Equal
+                | BinaryOp::NotEqual
+                | BinaryOp::GreaterThan
+                | BinaryOp::LessThan
+                | BinaryOp::GreaterEq
+                | BinaryOp::LessEq,
+                Typ::Number,
+                Typ::Number,
+            )
+            | (
+                BinaryOp::Equal
+                | BinaryOp::NotEqual
+                | BinaryOp::GreaterThan
+                | BinaryOp::LessThan
+                | BinaryOp::GreaterEq
+                | BinaryOp::LessEq,
+                Typ::String,
+                Typ::String,
+            ) => Ok(Typ::Bool),
+            (op, left, right) => Err(ParserError::BinaryTypeMismatch {
+                src: self.src.clone(),
+                span,
+                op,
+                left,
+                right,
+            }),
         }
     }
 
-    fn type_of_ident(&self, string: &str) -> Typ {
-        match string {
+    fn type_of_ident(&self, string: Rc<str>, span: Span) -> Res<Typ> {
+        Ok(match string.as_ref() {
             "print" => Typ::Function {
                 params: vec![Typ::Any],
                 ret: Box::new(Typ::Null),
@@ -439,8 +478,14 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                 params: vec![],
                 ret: Box::new(Typ::Number),
             },
-            _ => Typ::Any,
-        }
+            _ => {
+                return Err(ParserError::UnknownVariable {
+                    src: self.src.clone(),
+                    span,
+                    name: string,
+                });
+            }
+        })
     }
 
     pub fn parse(&mut self) -> Res<Vec<Expr>> {
@@ -454,15 +499,41 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
     }
 
     fn parse_typ(&mut self) -> Res<Option<Typ>> {
-        if self.matches(Token::Colon)?.is_some() {
-            let typ = match self.next()?.map(|l| l.t) {
-                Some(Token::Null) => Typ::Null,
-                Some(Token::Number) => Typ::Number,
-                Some(Token::String) => Typ::String,
-                Some(Token::Bool) => Typ::Bool,
-                Some(Token::Any) => Typ::Any,
-                Some(x) => panic!("Expected type, got {x}"),
-                None => panic!("Expected type"),
+        if let Some(colon) = self.matches(Token::Colon)? {
+            let lexeme = self.next()?;
+            let typ = match lexeme {
+                Some(Lexeme {
+                    t: Token::Null,
+                    span: _,
+                }) => Typ::Null,
+                Some(Lexeme {
+                    t: Token::Number,
+                    span: _,
+                }) => Typ::Number,
+                Some(Lexeme {
+                    t: Token::String,
+                    span: _,
+                }) => Typ::String,
+                Some(Lexeme {
+                    t: Token::Bool,
+                    span: _,
+                }) => Typ::Bool,
+                Some(Lexeme {
+                    t: Token::Any,
+                    span: _,
+                }) => Typ::Any,
+                Some(actual) => {
+                    return Err(ParserError::ExpectedType {
+                        src: self.src.clone(),
+                        actual,
+                    });
+                }
+                None => {
+                    return Err(ParserError::ExpectedTypeGotNone {
+                        src: self.src.clone(),
+                        colon: colon.span,
+                    });
+                }
             };
             Ok(Some(typ))
         } else {
@@ -525,12 +596,17 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             let span = left.span + right.span;
 
             let rhs_type = typ_right;
-            let lhs_type = self.env[depth].typs[slot].clone();
+            let lhs_type = self.env[self.env.len() - depth - 1].typs[slot].clone();
 
-            assert!(
-                rhs_type.can_coerce(&lhs_type),
-                "Type error: expected {rhs_type}, got {lhs_type}"
-            );
+            if !rhs_type.can_coerce(&lhs_type) {
+                return Err(ParserError::TypeMismatch {
+                    src: self.src.clone(),
+                    span: right.span,
+                    expected: lhs_type,
+                    actual: rhs_type,
+                    message: "variable cannot be updated to a different type",
+                });
+            }
 
             return Ok((
                 Expr {
@@ -561,7 +637,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         );
 
         let (right, typ_right) = self.parse_add_subtract()?;
-        let typ = self.type_of_binaryop(&typ_left, operation, &typ_right);
+        let typ = self.type_of_binaryop(typ_left, operation, typ_right, left.span + right.span)?;
         Ok((Expr::binary(left, operation, right), typ))
     }
 
@@ -575,7 +651,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         );
 
         let (right, typ_right) = self.parse_mult_div_mod()?;
-        let typ = self.type_of_binaryop(&typ_left, operation, &typ_right);
+        let typ = self.type_of_binaryop(typ_left, operation, typ_right, left.span + right.span)?;
         Ok((Expr::binary(left, operation, right), typ))
     }
 
@@ -589,7 +665,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             _ => return Ok((left, typ_left))
         );
         let (right, typ_right) = self.parse_unary_op()?;
-        let typ = self.type_of_binaryop(&typ_left, operation, &typ_right);
+        let typ = self.type_of_binaryop(typ_left, operation, typ_right, left.span + right.span)?;
         Ok((Expr::binary(left, operation, right), typ))
     }
 
@@ -602,7 +678,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         );
 
         let (right, typ_right) = self.parse_func_call()?;
-        let typ = self.type_of_unaryop(operation, &typ_right);
+        let typ = self.type_of_unaryop(operation, typ_right, lexeme.span + right.span)?;
         Ok((Expr::unary(operation, lexeme.span, right), typ))
     }
 
@@ -655,7 +731,7 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
             Token::NumLit(number) => literal(RuntimeVal::Number(number), span, Typ::Number),
             Token::True => literal(RuntimeVal::Boolean(true), span, Typ::Bool),
             Token::False => literal(RuntimeVal::Boolean(false), span, Typ::Bool),
-            Token::Ident(identifier) => self.parse_ident(identifier, span),
+            Token::Ident(identifier) => self.parse_ident(identifier, span)?,
             Token::Let => self.parse_decl(span)?,
             Token::Fn => self.parse_func_def(span)?,
             Token::If => self.parse_if(span)?,
@@ -687,28 +763,33 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         ))
     }
 
-    fn parse_ident(&self, identifier: Rc<str>, span: Span) -> (Expr, Typ) {
+    fn parse_ident(&self, identifier: Rc<str>, span: Span) -> Res<(Expr, Typ)> {
         let (kind, typ) = if let Some((depth, slot)) = self.find_var(&identifier) {
             let ident_typ = self.env[self.env.len() - depth - 1].typs[slot].clone();
             (ExprKind::VarGet { depth, slot }, ident_typ)
         } else {
-            let ident_typ = self.type_of_ident(identifier.as_ref());
+            let ident_typ = self.type_of_ident(identifier.clone(), span)?;
             (ExprKind::Ident(identifier), ident_typ)
         };
-        (Expr { span, kind }, typ)
+        Ok((Expr { span, kind }, typ))
     }
 
     fn parse_decl(&mut self, let_span: Span) -> Res<(Expr, Typ)> {
-        let name = self.consume_ident("Expected variable name after let")?;
+        let name = self.consume_ident("Expected variable name after let")?.0;
         let typ_annotation = self.parse_typ()?; // rhs
         self.consume(Token::Eq, "Expected '=' after let")?;
         let (init, init_typ) = self.parse_expr()?; // lhs
 
         let var_typ = if let Some(t) = typ_annotation {
-            assert!(
-                init_typ.can_coerce(&t),
-                "TypeError: Expected {t}, got {init_typ}"
-            );
+            if !init_typ.can_coerce(&t) {
+                return Err(ParserError::TypeMismatch {
+                    src: self.src.clone(),
+                    span: init.span,
+                    expected: t,
+                    actual: init_typ,
+                    message: "type annotation must match the initial value's type"
+                });
+            }
             t
         } else {
             init_typ
@@ -763,10 +844,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     fn parse_if(&mut self, if_span: Span) -> Res<(Expr, Typ)> {
         let (cond, cond_typ) = self.parse_expr()?;
-        assert!(
-            cond_typ.can_coerce(&Typ::Bool),
-            "conditions must be a boolean"
-        );
+        if !cond_typ.can_coerce(&Typ::Bool) {
+            return Err(ParserError::TypeMismatch {
+                src: self.src.clone(),
+                span: cond.span,
+                expected: Typ::Bool,
+                actual: cond_typ,
+                message: "if conditions must be booleans",
+            });
+        }
         self.consume(Token::OpenBracket, "Expected '{' after if condition")?;
 
         let (then, then_end, then_typ) = self.parse_block(EnvStackFrame::new())?;
@@ -778,10 +864,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     span: otherwise_open,
                 }) => {
                     let (body, close, otherwise_typ) = self.parse_block(EnvStackFrame::new())?;
-                    assert!(
-                        then_typ.can_coerce(&otherwise_typ),
-                        "then and otherwise must be the same type"
-                    );
+                    if !otherwise_typ.can_coerce(&then_typ) {
+                        return Err(ParserError::TypeMismatch {
+                            src: self.src.clone(),
+                            span: otherwise_open + close,
+                            expected: then_typ,
+                            actual: otherwise_typ,
+                            message: "then and otherwise blocks must be the same type"
+                        });
+                    }
                     (
                         (Expr {
                             kind: ExprKind::Block(body),
@@ -795,10 +886,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
                     span: if_span,
                 }) => {
                     let (inner, inner_typ) = self.parse_if(if_span)?;
-                    assert!(
-                        then_typ.can_coerce(&inner_typ),
-                        "then and inner if must be the same type"
-                    );
+                    if !inner_typ.can_coerce(&then_typ) {
+                        return Err(ParserError::TypeMismatch {
+                            src: self.src.clone(),
+                            span: inner.span,
+                            expected: then_typ,
+                            actual: inner_typ,
+                            message: "then block and if chain must be the same type",
+                        });
+                    }
                     let span = inner.span;
                     ((inner), span)
                 }
@@ -813,10 +909,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
             (Some(Box::new(otherwise)), span)
         } else {
-            assert!(
-                &then_typ.can_coerce(&Typ::Null),
-                "if without an otherwise must evaluate to null"
-            );
+            if !then_typ.can_coerce(&Typ::Null) {
+                return Err(ParserError::TypeMismatch {
+                    src: self.src.clone(),
+                    span: if_span + then_end,
+                    expected: Typ::Null,
+                    actual: then_typ,
+                    message: "an if expression without an otherwise block must evaluate to null"
+                });
+            }
             (None, if_span + then_end)
         };
 
@@ -842,10 +943,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
 
     fn parse_while(&mut self, while_span: Span) -> Res<(Expr, Typ)> {
         let (cond, cond_typ) = self.parse_expr()?;
-        assert!(
-            &cond_typ.can_coerce(&Typ::Bool),
-            "conditions must be a boolean"
-        );
+        if !cond_typ.can_coerce(&Typ::Bool) {
+            return Err(ParserError::TypeMismatch {
+                src: self.src.clone(),
+                span: cond.span,
+                expected: Typ::Bool,
+                actual: cond_typ,
+                message: "while conditions must be booleans",
+            });
+        }
         self.consume(Token::OpenBracket, "Expected '{' after while")?;
         let (body, close, _) = self.parse_block(EnvStackFrame::new())?;
         Ok((
@@ -865,10 +971,15 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         let (init, _) = self.parse_expr()?;
         self.consume(Token::Semi, "Expected ';' after for loop init")?;
         let (cond, cond_typ) = self.parse_expr()?;
-        assert!(
-            &cond_typ.can_coerce(&Typ::Bool),
-            "conditions must be a boolean"
-        );
+        if !cond_typ.can_coerce(&Typ::Bool) {
+            return Err(ParserError::TypeMismatch {
+                src: self.src.clone(),
+                span: cond.span,
+                expected: Typ::Bool,
+                actual: cond_typ,
+                message: "for conditions must be booleans",
+            });
+        }
         self.consume(Token::Semi, "Expected ';' after for loop condition")?;
 
         self.env.push(EnvStackFrame::new());

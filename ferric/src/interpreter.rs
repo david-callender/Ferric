@@ -21,7 +21,7 @@ pub enum RuntimeError {
         right: RuntimeVal,
     },
 
-    #[error("Unary type mismatch with {right}\n{}", .span.format(src, &format!("cannot {op} {right}")))]
+    #[error("Unary type mismatch with {right:#}\n{}", .span.format(src, &format!("cannot {op} {right:#}")))]
     UnaryTypeMismatch {
         src: ProgramSrc,
         span: Span,

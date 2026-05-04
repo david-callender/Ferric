@@ -1,0 +1,19 @@
+let rec: any = 0;
+
+let fib = fn(n: number) {
+    if n <= 1 {
+        n
+    } otherwise {
+        rec(n - 1) + rec(n - 2)
+    }
+};
+
+rec = fib;
+
+let start = clock();
+print(fib(32));
+print("\n");
+let end = clock();
+print("took ");
+print(end - start);
+print(" seconds\n");

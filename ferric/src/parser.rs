@@ -686,24 +686,39 @@ impl<I: Iterator<Item = Result<Lexeme, LexerError>>> Parser<I> {
         let (mut func_call, mut func_typ) = self.parse_basic()?;
 
         while self.matches(Token::OpenParen)?.is_some() {
-            let Typ::Function { params, ret } = func_typ else {
+            if let Typ::Function { params, ret } = func_typ {
+                let (args_list, close) = self.consume_args()?;
+                let mut args = vec![];
+                assert_eq!(params.len(), args_list.len(), "different argument counts");
+                for ((arg, typ), expected_typ) in args_list.into_iter().zip(params) {
+                    assert!(&typ.can_coerce(&expected_typ));
+                    args.push(arg);
+                }
+                func_call = Expr {
+                    span: func_call.span + close,
+                    kind: ExprKind::Call {
+                        callee: Box::new(func_call),
+                        args,
+                    },
+                };
+                func_typ = *ret;
+            } else if func_typ == Typ::Any {
+                let (args_list, close) = self.consume_args()?;
+                let mut args = vec![];
+                for arg in args_list {
+                    args.push(arg.0);
+                }
+                func_call = Expr {
+                    span: func_call.span + close,
+                    kind: ExprKind::Call {
+                        callee: Box::new(func_call),
+                        args,
+                    },
+                };
+                func_typ = Typ::Any;
+            } else {
                 panic!("not a function object");
-            };
-            let (args_list, close) = self.consume_args()?;
-            let mut args = vec![];
-            assert_eq!(params.len(), args_list.len(), "different argument counts");
-            for ((arg, typ), expected_typ) in args_list.into_iter().zip(params) {
-                assert!(&typ.can_coerce(&expected_typ));
-                args.push(arg);
             }
-            func_call = Expr {
-                span: func_call.span + close,
-                kind: ExprKind::Call {
-                    callee: Box::new(func_call),
-                    args,
-                },
-            };
-            func_typ = *ret;
         }
 
         Ok((func_call, func_typ))

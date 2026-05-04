@@ -702,12 +702,12 @@ fn builtin_print<W: Write>(i: &mut Interpreter<'_, W>, args: Args) -> Res<Runtim
     // TODO: How to do format strings here, at some point
 
     if args.args.is_empty() {
-        writeln!(i.output).expect("Failed to write to output");
+        write!(i.output, "").expect("Failed to write to output");
     } else {
         for val in args.args {
             write!(i.output, "{val}").expect("Failed to write to output"); // TODO: prints a function value
         }
-        writeln!(i.output).expect("Failed to write to output");
+        write!(i.output, "").expect("Failed to write to output");
     }
     Ok(RuntimeVal::Null)
 }
